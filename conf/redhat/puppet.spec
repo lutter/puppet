@@ -14,6 +14,8 @@ Group: System Environment/Base
 
 URL: http://puppet.reductivelabs.com/
 Source: http://reductivelabs.com/downloads/puppet/%{name}-%{version}.tgz
+# Man pages that were omitted from the release tarball
+Source1: manpages.tar.gz
 
 Requires: ruby >= 1.8.1
 %if %has_ruby_abi
@@ -43,6 +45,8 @@ The server can also function as a certificate authority and file server.
 
 %prep
 %setup -q
+%setup -a 1 
+(cd man/man8 && rm pi.8 puppetdoc.8)
 
 %build
 for f in bin/* ; do 
@@ -65,6 +69,7 @@ install -d -m0755 %{buildroot}%{_bindir}
 install -d -m0755 %{buildroot}%{ruby_sitelibdir}
 install -d -m0755 %{buildroot}%{_sysconfdir}/puppet/manifests
 install -d -m0755 %{buildroot}%{_docdir}/%{name}-%{version}
+install -d -m0755 %{buildroot}%{_mandir}/man8
 install -d -m0755 %{buildroot}%{_localstatedir}/lib/puppet
 install -d -m0755 %{buildroot}%{_localstatedir}/run/puppet
 install -d -m0755 %{buildroot}%{_localstatedir}/log/puppet
@@ -83,6 +88,7 @@ install -Dp -m0755 %{confdir}/server.init %{buildroot}%{_initrddir}/puppetmaster
 install -Dp -m0644 %{confdir}/fileserver.conf %{buildroot}%{_sysconfdir}/puppet/fileserver.conf
 install -Dp -m0644 %{confdir}/puppet.conf %{buildroot}%{_sysconfdir}/puppet/puppet.conf
 install -Dp -m0644 %{confdir}/logrotate %{buildroot}%{_sysconfdir}/logrotate.d/puppet
+install -Dp -m0644 man/man8/* %{buildroot}%{_mandir}/man8
 # We need something for these ghosted files, otherwise rpmbuild
 # will complain loudly. They won't be included in the binary packages
 touch %{buildroot}%{_sysconfdir}/puppet/puppetmasterd.conf
@@ -109,6 +115,10 @@ touch %{buildroot}%{_sysconfdir}/puppet/puppetd.conf
 %attr(-, puppet, puppet) %{_localstatedir}/run/puppet
 %attr(-, puppet, puppet) %{_localstatedir}/log/puppet
 %attr(-, puppet, puppet) %{_localstatedir}/lib/puppet
+%doc %{_mandir}/man8/puppet.8.gz
+%doc %{_mandir}/man8/puppet.conf.8.gz
+%doc %{_mandir}/man8/puppetd.8.gz
+%doc %{_mandir}/man8/ralsh.8.gz
 
 %files server
 %defattr(-, root, root, 0755)
@@ -121,6 +131,10 @@ touch %{buildroot}%{_sysconfdir}/puppet/puppetd.conf
 %ghost %config(noreplace,missingok) %{_sysconfdir}/puppet/puppetca.conf
 %ghost %config(noreplace,missingok) %{_sysconfdir}/puppet/puppetmasterd.conf
 %{_sbindir}/puppetca
+%doc %{_mandir}/man8/filebucket.8.gz
+%doc %{_mandir}/man8/puppetca.8.gz
+%doc %{_mandir}/man8/puppetmasterd.8.gz
+%doc %{_mandir}/man8/puppetrun.8.gz
 
 %pre
 /usr/sbin/groupadd -r puppet 2>/dev/null || :
@@ -157,6 +171,10 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Tue Mar 25 2008 David Lutterkort <dlutter@redhat.com> - 0.24.4-1
+- Add man pages (from separate tarball, upstream will fix to
+  include in main tarball)
+
 * Mon Mar 24 2008 David Lutterkort <dlutter@redhat.com> - 0.24.3-1
 - New version
 
