@@ -12,9 +12,14 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
     end
 
     # Look for our node in ldap.
-    def find(name)
+    def find(request)
         return nil unless information = super
+
+        name = request.key
+
         node = Puppet::Node.new(name)
+
+        information[:stacked_parameters] = {}
 
         parent_info = nil
         parent = information[:parent]
@@ -31,6 +36,10 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
                 raise Puppet::Error.new("Could not find parent node '%s'" % parent)
             end
             information[:classes] += parent_info[:classes]
+            parent_info[:stacked].each do |value|
+                param = value.split('=', 2)
+                information[:stacked_parameters][param[0]] = param[1]
+            end
             parent_info[:parameters].each do |param, value|
                 # Specifically test for whether it's set, so false values are handled
                 # correctly.
@@ -40,6 +49,15 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
             information[:environment] ||= parent_info[:environment]
 
             parent = parent_info[:parent]
+        end
+
+        information[:stacked].each do |value|
+            param = value.split('=', 2)
+            information[:stacked_parameters][param[0]] = param[1]
+        end
+
+        information[:stacked_parameters].each do |param, value|
+            information[:parameters][param] = value unless information[:parameters].include?(param)
         end
 
         node.classes = information[:classes].uniq unless information[:classes].empty?
@@ -57,6 +75,12 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
         else
             nil
         end
+    end
+
+    # The attributes that Puppet will stack as array over the full
+    # hierarchy.
+    def stacked_attributes
+        Puppet[:ldapstackedattrs].split(/\s*,\s*/)
     end
 
     # Process the found entry.  We assume that we don't just want the
@@ -81,6 +105,14 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
                 values.each do |v| result[:classes] << v end
             end
         }
+
+        result[:stacked] = []
+        stacked_attributes.each { |attr|
+            if values = entry.vals(attr)
+                result[:stacked] = result[:stacked] + values
+            end
+        }
+        
 
         result[:parameters] = entry.to_hash.inject({}) do |hash, ary|
             if ary[1].length == 1
@@ -122,9 +154,5 @@ class Puppet::Node::Ldap < Puppet::Indirector::Ldap
             filter = filter.gsub('%s', name)
         end
         filter
-    end
-
-    def version(name)
-        Puppet::Node::Facts.version(name)
     end
 end

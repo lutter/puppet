@@ -8,6 +8,7 @@ require 'puppet/network/client/master'
 
 describe Puppet::Network::Client::Master, " when retrieving the catalog" do
     before do
+        Puppet.settings.stubs(:use).returns(true)
         @master = mock 'master'
         @client = Puppet::Network::Client.master.new(
             :Master => @master
@@ -36,30 +37,6 @@ describe Puppet::Network::Client::Master, " when retrieving the catalog" do
         proc { @client.getconfig }.should raise_error(Puppet::Network::ClientError)
     end
 
-    it "should use the cached catalog if it is up to date" do
-        file = "/path/to/cachefile"
-        @client.stubs(:cachefile).returns(file)
-        FileTest.expects(:exist?).with(file).returns(true)
-        @client.expects(:fresh?).with(@facts).returns true
-        @client.class.stubs(:facts).returns(@facts)
-        @client.expects(:use_cached_config).returns(true)
-        Puppet.stubs(:info)
-
-        @client.getconfig
-    end
-
-    it "should log that the catalog does not need a recompile" do
-        file = "/path/to/cachefile"
-        @client.stubs(:cachefile).returns(file)
-        FileTest.stubs(:exist?).with(file).returns(true)
-        @client.stubs(:fresh?).with(@facts).returns true
-        @client.stubs(:use_cached_config).returns(true)
-        @client.class.stubs(:facts).returns(@facts)
-        Puppet.expects(:info).with { |m| m.include?("up to date") }
-
-        @client.getconfig
-    end
-
     it "should retrieve plugins if :pluginsync is enabled" do
         file = "/path/to/cachefile"
         @client.stubs(:cachefile).returns(file)
@@ -69,7 +46,6 @@ describe Puppet::Network::Client::Master, " when retrieving the catalog" do
         @client.expects(:getplugins)
         @client.stubs(:get_actual_config).returns(nil)
         FileTest.stubs(:exist?).with(file).returns(true)
-        @client.stubs(:fresh?).with(@facts).returns true
         @client.stubs(:use_cached_config).returns(true)
         @client.class.stubs(:facts).returns(@facts)
         @client.getconfig
@@ -243,6 +219,7 @@ end
 
 describe Puppet::Network::Client::Master, " when using the cached catalog" do
     before do
+        Puppet.settings.stubs(:use).returns(true)
         @master = mock 'master'
         @client = Puppet::Network::Client.master.new(
             :Master => @master

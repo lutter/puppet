@@ -165,7 +165,7 @@ module Functions
     type is defined, either as a native type or a defined type, or whether a class is defined.
     This is useful for checking whether a class is defined and only including it if it is.
     This function can also test whether a resource has been defined, using resource references
-    (e.g., ``if defined(File['/tmp/myfile'] { ... }``).  This function is unfortunately
+    (e.g., ``if defined(File['/tmp/myfile']) { ... }``).  This function is unfortunately
     dependent on the parse order of the configuration when testing whether a resource is defined.") do |vals|
         result = false
         vals.each do |val|
@@ -187,6 +187,22 @@ module Functions
         end
         result
     end
+
+    newfunction(:fqdn_rand, :type => :rvalue, :doc => "Generates random 
+    numbers based on the node's fqdn. The first argument sets the range.
+    The second argument specifies a number to add to the seed and is
+    optional.") do |args|
+	require 'md5'
+	max = args[0] 
+	if args[1] then
+	     seed = args[1]
+	else
+	     seed = 1
+	end
+	fqdn_seed = MD5.new(lookupvar('fqdn')).to_s.hex
+	srand(seed+fqdn_seed)
+	rand(max).to_s
+    end 
 
     newfunction(:fail, :doc => "Fail with a parse error.") do |vals|
         vals = vals.collect { |s| s.to_s }.join(" ") if vals.is_a? Array

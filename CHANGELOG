@@ -1,3 +1,76 @@
+    Exporting or collecting resources no longer raises an exception
+    when no storeconfigs is enabled, it just produces a warning.
+
+    Always using the cert name to store yaml files, which fixes #1178.
+    The Master handler previously provided the support for the :node_name
+    setting, and that functionality has now been moved into the Node
+    class.  At the same time, the names to search through have been
+    changed somewhat:  Previously, the certificate name and the 
+    hostname were both used for searching, but now, the cert name
+    is always searched first (unless node_name == facter), but only
+    the Facter hostname, domain, and fqdn are used otherwise.  We no
+    longer split the cert name, only the hostname/domain/fqdn.
+
+    Fixing transaction support for prefetching generated resources.
+
+    Adding support for settings within the existing Facter provider confines.
+
+    Moving all confine code out of the Provider class, and fixing #1197. 
+    Created a Confiner module for the Provider class methods, enhanced 
+    the interface between it and the Confine class to make sure binary 
+    paths are searched for fresh each time.
+
+    Modified the 'factpath' setting to automatically configure
+    Facter to load facts there if a new enough version of
+    Facter is used.
+
+    Crontab provider: fix a parse error when a line begins with a space 
+    character (fixes #1216)
+
+    Instead of deleting the init scripts (with --del) we should simply 
+    disable it with chkconfig service off, and respectfully do the same 
+    for enable => true;
+ 
+    Added ldap providers for users and groups.
+
+    Added support for the --all option to puppetca --clean.  If
+    puppetca --clean --all is issued then all client certificates
+    are removed.
+ 
+    Resources now return the 'should' value for properties from
+    the [] accessor method (they previously threw an exception when
+    this method was used with properties).  This shouldn't have any
+    affect functionally; it just makes the method equivalent to 'should'
+    for properties, but it works for all attribute types now.
+
+    Modified the 'master' handler to use the Catalog class to
+    compile node configurations, rather than using the Configuration
+    handler, which was never used directly.  I removed the Configuration
+    handler as a result.
+
+    Modified the 'master' handler (responsible for sending configurations
+    to clients) to always return Time.now as its compile date, so
+    configurations will always get recompiled.
+
+    Fixed #1184 -- definitions now autoload correctly all of the time.
+
+    Removed the code from the client that tries to avoid recompiling
+    the catalog. The client will now always recompile, assuming it
+    can reach the server.  It will still use the cached config if
+    there's a failure.
+
+    Fixing #1173 -- classes and definitions can now have the same
+    name as a directory with no failures.
+
+    Saving new facts now expires any cached node information.
+
+    Switching how caching is handled, so that objects now all
+    have an expiration date associated with them.  This makes it
+    much easier to know whether a given cached object should be used
+    or if it should be regenerated.
+
+    Changing the default environment to production.
+
 0.24.4
     Pass source to pkg_add via the PKG_PATH environment variable if
     it ends in a '/' indicating it is a directory. Allows pkg_add

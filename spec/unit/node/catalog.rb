@@ -292,6 +292,26 @@ describe Puppet::Node::Catalog, " when converting to a RAL catalog" do
         @catalog.vertices.each { |v| v.catalog.object_id.should equal(@catalog.object_id) }
     end
 
+    it "should convert parser resources to transobjects and set the catalog" do
+        catalog = Puppet::Node::Catalog.new("mynode")
+
+        result = mock 'catalog'
+        result.stub_everything
+
+        Puppet::Node::Catalog.expects(:new).returns result
+
+        trans = mock 'trans'
+        resource = Puppet::Parser::Resource.new(:scope => mock("scope"), :source => mock("source"), :type => :file, :title => "/eh")
+        resource.expects(:to_transobject).returns trans
+        trans.expects(:catalog=).with result
+
+        trans.stub_everything
+
+        catalog.add_resource(resource)
+
+        catalog.to_ral
+    end
+
     # This tests #931.
     it "should not lose track of resources whose names vary" do
         changer = Puppet::TransObject.new 'changer', 'test'
@@ -562,6 +582,7 @@ describe Puppet::Node::Catalog do
         # super() doesn't work in the setup method for some reason
         before do
             @catalog.host_config = true
+            Puppet::Util::Storage.stubs(:store)
         end
 
         it "should send a report if reporting is enabled" do
@@ -777,14 +798,14 @@ end
 
 describe Puppet::Node::Catalog, " when indirecting" do
     before do
-        @indirection = mock 'indirection'
+        @indirection = stub 'indirection', :name => :catalog
 
         Puppet::Indirector::Indirection.clear_cache
     end
 
     it "should redirect to the indirection for retrieval" do
         Puppet::Node::Catalog.stubs(:indirection).returns(@indirection)
-        @indirection.expects(:find).with(:myconfig)
+        @indirection.expects(:find)
         Puppet::Node::Catalog.find(:myconfig)
     end
 
