@@ -14,6 +14,7 @@ describe ssh_authorized_key do
 
         @provider = stub 'provider', :class => @provider_class, :file_path => "/tmp/whatever", :clear => nil
         @provider_class.stubs(:new).returns(@provider)
+        @catalog = Puppet::Node::Catalog.new
     end
 
     it "should have a name parameter" do
@@ -33,27 +34,27 @@ describe ssh_authorized_key do
     end
 
     it "should support :present as a value for :ensure" do
-        proc { @class.create(:name => "whev", :ensure => :present) }.should_not raise_error
+        proc { @class.create(:name => "whev", :ensure => :present, :user => "nobody") }.should_not raise_error
     end
 
     it "should support :absent as a value for :ensure" do
-        proc { @class.create(:name => "whev", :ensure => :absent) }.should_not raise_error
+        proc { @class.create(:name => "whev", :ensure => :absent, :user => "nobody") }.should_not raise_error
     end
 
     it "should have an type property" do
         @class.attrtype(:type).should == :property
     end
     it "should support ssh-dss as an type value" do
-        proc { @class.create(:name => "whev", :type => "ssh-dss") }.should_not raise_error
+        proc { @class.create(:name => "whev", :type => "ssh-dss", :user => "nobody") }.should_not raise_error
     end
     it "should support ssh-rsa as an type value" do
-        proc { @class.create(:name => "whev", :type => "ssh-rsa") }.should_not raise_error
+        proc { @class.create(:name => "whev", :type => "ssh-rsa", :user => "nobody") }.should_not raise_error
     end
     it "should support :dsa as an type value" do
-        proc { @class.create(:name => "whev", :type => :dsa) }.should_not raise_error
+        proc { @class.create(:name => "whev", :type => :dsa, :user => "nobody") }.should_not raise_error
     end
     it "should support :rsa as an type value" do
-        proc { @class.create(:name => "whev", :type => :rsa) }.should_not raise_error
+        proc { @class.create(:name => "whev", :type => :rsa, :user => "nobody") }.should_not raise_error
     end
 
     it "should not support values other than ssh-dss, ssh-rsa, dsa, rsa in the ssh_authorized_key_type" do
@@ -76,5 +77,18 @@ describe ssh_authorized_key do
         @class.attrtype(:target).should == :property
     end
 
-    after { @class.clear }
+    it "should raise an error when neither user nor target is given" do
+        proc do
+            @class.create(
+              :name   => "Test",
+              :key    => "AAA",
+              :type   => "ssh-rsa",
+              :ensure => :present)
+        end.should raise_error(Puppet::Error)
+    end
+
+    after do
+      @class.clear
+      @catalog.clear
+    end
 end

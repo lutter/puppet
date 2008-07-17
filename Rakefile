@@ -5,7 +5,7 @@ $: << File.expand_path(File.join(File.dirname(__FILE__), 'lib'))
 begin
     require 'rake/reductive'
 rescue LoadError
-    $stderr.puts "You must have the Reductive build library in your RUBYLIB."
+    $stderr.puts "You must have the Reductive build library in your RUBYLIB; see http://github.com/lak/reductive-build/tree/master."
     exit(14)
 end
 
@@ -102,7 +102,7 @@ def daily(package)
     edir = "/tmp/daily-export"
     Dir.mkdir edir
     Dir.chdir(edir) do
-        sh %{svn export http://reductivelabs.com/svn/#{package}/trunk #{package} >/dev/null}
+        sh %{git clone git://reductivelabs.com/#{package} #{package} >/dev/null}
         sh %{tar cf - #{package} | gzip -c > #{dailyfile(package)}}
     end
     FileUtils.rm_rf(edir)

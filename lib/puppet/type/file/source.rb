@@ -101,8 +101,7 @@ module Puppet
             begin
                 desc = server.describe(path, @resource[:links])
             rescue Puppet::Network::XMLRPCClientError => detail
-                self.err "Could not describe %s: %s" % [path, detail]
-                return nil
+                fail detail, "Could not describe %s: %s" % [path, detail]
             end
 
             return nil if desc == ""
@@ -135,18 +134,8 @@ module Puppet
             return args
         end
         
-        # Have we successfully described the remote source?
-        def described?
-            ! @stats.nil? and ! @stats[:type].nil? #and @is != :notdescribed
-        end
-        
         # Use the info we get from describe() to check if we're in sync.
         def insync?(currentvalue)
-            unless described?
-                warning "No specified sources exist"
-                return true
-            end
-
             if currentvalue == :nocopy
                 return true
             end
@@ -180,7 +169,11 @@ module Puppet
         def pinparams
             [:mode, :type, :owner, :group]
         end
-        
+
+        def found?
+            ! (@stats.nil? or @stats[:type].nil?)
+        end
+
         # This basically calls describe() on our file, and then sets all
         # of the local states appropriately.  If the remote file is a normal
         # file then we set it to copy; if it's a directory, then we just mark
@@ -202,8 +195,8 @@ module Puppet
                 }
             end
 
-            if @stats.nil? or @stats[:type].nil?
-                return nil # :notdescribed
+            if !found?
+                raise Puppet::Error, "No specified source was found from" + @should.inject("") { |s, source| s + " #{source},"}.gsub(/,$/,"")
             end
             
             case @stats[:type]

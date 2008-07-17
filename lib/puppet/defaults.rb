@@ -69,8 +69,6 @@ module Puppet
         :rundir => { 
             :default => rundir,
             :mode => 01777,
-            :owner => "$user",
-            :group => "$group",
             :desc => "Where Puppet PID files are kept."
         },
         :genconfig => [false,
@@ -160,8 +158,12 @@ module Puppet
     end
 
     Puppet.setdefaults(:ssl,
-        :certname => [fqdn, "The name to use when handling certificates.  Defaults
-            to the fully qualified domain name."],
+        # We have to downcase the fqdn, because the current ssl stuff (as oppsed to in master) doesn't have good facilities for 
+        # manipulating naming.
+        :certname => {:default => fqdn.downcase, :desc => "The name to use when handling certificates.  Defaults
+            to the fully qualified domain name.",
+            :call_on_define => true, # Call our hook with the default value, so we're always downcased
+            :hook => proc { |value| raise(ArgumentError, "Certificate names must be lower case; see #1168") unless value == value.downcase }},
         :certdnsnames => ['', "The DNS names on the Server certificate as a colon-separated list.
             If it's anything other than an empty string, it will be used as an alias in the created
             certificate.  By default, only the server gets an alias set up, and only for 'puppet'."],
@@ -354,7 +356,9 @@ module Puppet
         # To make sure this directory is created before we try to use it on the server, we need
         # it to be in the server section (#1138).
         :yamldir => {:default => "$vardir/yaml", :owner => "$user", :group => "$user", :mode => "750",
-            :desc => "The directory in which YAML data is stored, usually in a subdirectory."}
+            :desc => "The directory in which YAML data is stored, usually in a subdirectory."},
+        :clientyamldir => {:default => "$vardir/client_yaml", :mode => "750",
+            :desc => "The directory in which client-side YAML data is stored."}
     )
 
     self.setdefaults(:puppetd,

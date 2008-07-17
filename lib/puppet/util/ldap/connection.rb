@@ -8,6 +8,18 @@ class Puppet::Util::Ldap::Connection
 
     attr_reader :connection
 
+    # Return a default connection, using our default settings.
+    def self.instance
+        ssl = if Puppet[:ldaptls]
+                  :tls
+              elsif Puppet[:ldapssl]
+                  true
+              else
+                  false
+              end
+        new(Puppet[:ldapserver], Puppet[:ldapport], :ssl => ssl)
+    end
+
     def close
         connection.unbind if connection.bound?
     end

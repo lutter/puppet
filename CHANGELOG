@@ -1,3 +1,85 @@
+0.24.5
+    Fix #1426 - services on redhat are restarted again and status is 
+    called from the Red Hat provider
+
+    Fixed #1414 - Return code from waitpid now right shifted 8 bits
+
+    Fixed #174 - a native type type for managing ssh authorized_keys 
+    files is available.
+
+    Further moves from the examples directory and ext directory
+
+    Fixed #1397 One line fix, fail instead of log
+
+    Moved debian to conf and updated examples directory
+
+    Fixed #1368 - updated Red Hat init scripts
+ 
+    Added message referencing ReductiveLabs build library
+
+    Fixed #1396 - Added sha1 function from DavidS to core
+    
+    Fixed #1399 - the ldap user provider now knows it can manage
+    passwords.
+    
+    Fixed #1272 - if you provide a group name as the gid to an ldap
+    user, the name will be converted to a gid.  Note that this only
+    looks up ldap groups, at this point; if you want to set an ldap
+    user's primary group to a local group, you have to specify the GID.
+
+    Fixed #1226 - gems can now specify source repositories.
+
+    Fixed #1232 - the rundir no longer specifies a user/group,
+    and there are now client- and server-specific yaml directories.
+
+    Fixed 1240 - puppet will function more like puppetd if graphing
+    or reporting are enabled.
+    
+    Fixed #1231 - Exceptions during initialization should now be clearer.
+
+    Fixed #1006 - puppetrun --class works again.  I added the class
+    membership testing to the Ldap node terminus, and added tests,
+    so it shouldn't break again.
+
+    Fixed #1114 - Facts in plugin directories should now be autoloaded,
+    as long as you're using Facter 1.5.
+
+    Fixed #1195 - Updated Gentoo init scripts
+
+    Fixed #1367 - Updated Rakefile for new daily builds
+
+    Fixed #1370 - removed test/util/loadedfile.rb tests
+    
+    Fixed #1221 - aliases to titles now work for resources.
+    
+    Fixed #1012 - templates in the templatedir are preferred to module templates.
+
+    Fixed #707 - special '@reboot'-style cron jobs work again.
+
+    Fixed #1360 - allowdupe works on groups again.
+
+    Fixed #1369 - the init service provider now supports HP-UX.
+
+    Removed support for the 'node_name' setting in LDAP and external node 
+    lookups.
+
+    Also removed support for 'default' nodes in external nodes.
+    LDAP nodes now use the certificate name, the short name, and 'default',
+    but external nodes just use the certificate name and any custom terminus
+    types will use just the certificate name.
+    
+    Fixed #1201 - all external node attributes are converted to strings.
+
+    Fixing #1168 (for 0.24.x) -- automatically downcasing the fqdn.
+    Also requiring that passed in certnames be downcased; the setting
+    system isn't currently flexible enough to automatically downcase
+    it for the user.
+
+    Adding a ResourceTemplate class for using templates directly
+    within resources (i.e., client-side templates).  This would really
+    only be used for composite resources that pass the results of the
+    template on to generated resources.
+
     Exporting or collecting resources no longer raises an exception
     when no storeconfigs is enabled, it just produces a warning.
 

@@ -19,10 +19,10 @@ describe Puppet::Node::Catalog do
             Puppet::Node::Catalog.indirection.stubs(:terminus_class).returns :yaml
 
             # Load now, before we stub the exists? method.
-            Puppet::Node::Catalog.indirection.terminus(:yaml)
+            terminus = Puppet::Node::Catalog.indirection.terminus(:yaml)
+            terminus.expects(:path).with("me").returns "/my/yaml/file"
 
-            file = File.join(Puppet[:yamldir], "catalog", "me.yaml")
-            FileTest.expects(:exist?).with(file).returns false
+            FileTest.expects(:exist?).with("/my/yaml/file").returns false
             Puppet::Node::Catalog.find("me").should be_nil
         end
 
@@ -39,6 +39,16 @@ describe Puppet::Node::Catalog do
             compiler.expects(:compile).with(node).returns nil
 
             Puppet::Node::Catalog.find("me").should be_nil
+        end
+
+        it "should pass provided node information directly to the terminus" do
+            terminus = mock 'terminus'
+
+            Puppet::Node::Catalog.indirection.stubs(:terminus).returns terminus
+
+            node = mock 'node'
+            terminus.expects(:find).with { |request| request.options[:use_node] == node }
+            Puppet::Node::Catalog.find("me", :use_node => node)
         end
     end
 end

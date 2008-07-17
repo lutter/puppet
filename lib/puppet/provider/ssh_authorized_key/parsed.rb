@@ -31,19 +31,39 @@ Puppet::Type.type(:ssh_authorized_key).provide(:parsed,
         }
 
     def prefetch
-        if not @resource.should(:target)
-            #
-            # Set default target when user is given
-            if val = @resource.should(:user)
-                target =  File.expand_path("~%s/.ssh/authorized_keys" % val)
-                Puppet::debug("Setting target to %s" % target)
-                @resource[:target] = target
-            else
-                raise Puppet::Error, "Missing attribute 'user' or 'target'"
-            end
+        # This was done in the type class but path expansion was failing for
+        # not yet existing users, the only workaround I found was to move that
+        # in the provider.
+        if user = @resource.should(:user)
+            target = File.expand_path("~%s/.ssh/authorized_keys" % user)
+            @property_hash[:target] = target
+            @resource[:target] = target
         end
 
         super
+    end
+
+    def flush
+        # As path expansion had to be moved in the provider, we cannot generate new file
+        # resources and thus have to chown and chmod here. It smells hackish.
+        
+        # Create target's parent directory if nonexistant
+        if target = @property_hash[:target]
+            dir = File.dirname(@property_hash[:target])
+            if not File.exist? dir
+                Puppet.debug("Creating directory %s which did not exist" % dir)
+                Dir.mkdir(dir, 0700)
+            end
+        end
+
+        # Generate the file
+        super
+
+        # Ensure correct permissions
+        if target and user = @property_hash[:user]
+            File.chown(Puppet::Util.uid(user), nil, dir)
+            File.chown(Puppet::Util.uid(user), nil, @property_hash[:target])
+        end
     end
 end
 
