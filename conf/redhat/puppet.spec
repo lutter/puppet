@@ -2,7 +2,7 @@
 %define pbuild %{_builddir}/%{name}-%{version}
 %define confdir conf/redhat
 
-%define has_ruby_abi 0%{?fedora:%fedora} >= 5 || 0%{?rhel:%rhel} >= 5
+%define has_ruby_abi 0%{?fedora:%fedora} >= 5 || 0%{?rhel:%rhel} >= 5 || 0%{?centos:%centos} >= 5
 %define has_ruby_noarch %has_ruby_abi
 
 Summary: A network tool for managing many disparate systems
