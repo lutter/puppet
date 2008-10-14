@@ -1,4 +1,40 @@
 0.24.x
+    Fixing #1614 - Environments no longer have to be listed out
+
+    Fixed #1628 - Changed node search to use certname rather than Facter hostname
+    
+    Fixed #1613 - The client environment will be substituted when looking up settings.
+
+    Updated puppet binary documentation 
+
+    Feature #1624 - Added RBAC roles to solaris user provider
+
+    Fixed #1586 - Specifying "fully qualified" package names in Gentoo
+
+    Fixed #1620 - Add 'sles' to Puppet confines when 'suse' is used
+
+    Fixed #1585 - Allow complex 'if' and variable expressions
+
+    Fixed #1564 - Saving File#checksum to state.yaml broken
+
+    Fixed #1603 - Added support for running Puppet inside a Rack application
+    (mod_rails) with Passenger and Apache
+
+    Fixed #1596 - Deploying file resources with ++ generates error
+
+    Modified the group and zone resource types to no longer call
+    'currentpropvalues' as a means of setting all values to absent.
+    There should be no behaviour change from this change.
+
+    Modified the behaviour of resource-level 'retrieve' -- it only
+    calls 'retrieve' on each property if the resource exists.
+
+    Fixed #1622 - Users and their groups should again add in one transaction
+
+    Fixed #791 - You should now be able to create and find a user/group in one transaction.
+
+    Fixed #1610 - Raise "Filebucketed" messages to Notice priority
+
     Added a number of confines to package providers
 
     Fixed #1609 - Added confines for the Gentoo, FreeBSD and 

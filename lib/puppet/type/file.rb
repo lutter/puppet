@@ -368,7 +368,7 @@ module Puppet
                         Find.find(self[:path]) do |f|
                             if File.file?(f)
                                 sum = backup.backup(f)
-                                self.info "Filebucketed %s to %s with sum %s" %
+                                self.notice "Filebucketed %s to %s with sum %s" %
                                     [f, backup.name, sum]
                             end
                         end
@@ -403,7 +403,7 @@ module Puppet
                 case backup
                 when Puppet::Network::Client.client(:Dipper):
                     sum = backup.backup(file)
-                    self.info "Filebucketed to %s with sum %s" %
+                    self.notice "Filebucketed to %s with sum %s" %
                         [backup.name, sum]
                     return true
                 when String:
@@ -1157,4 +1157,5 @@ module Puppet
     require 'puppet/type/file/group'
     require 'puppet/type/file/mode'
     require 'puppet/type/file/type'
+    require 'puppet/type/file/selcontext'  # SELinux file context
 end
