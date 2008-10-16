@@ -18,11 +18,22 @@ module Puppet::Util::SELinux
         unless selinux_support?
             return nil
         end
-        context = `stat -c %C #{file}`
-        if ($?.to_i >> 8) > 0
+        context = ""
+        begin
+            execpipe("stat -c %C #{file}") do |out|
+                out.each do |line|
+                    context << line
+                end
+            end
+        rescue Puppet::ExecutionFailure
             return nil
         end
         context.chomp!
+        # Handle the case that the system seems to have SELinux support but
+        # stat finds unlabled files.
+        if context == "(null)"
+            return nil
+        end
         return context
     end
 
@@ -34,11 +45,20 @@ module Puppet::Util::SELinux
     # Note: For this command to work a full, non-relative, filesystem path
     # should be given.
     def get_selinux_default_context(file)
+        unless selinux_support?
+            return nil
+        end
         unless FileTest.executable?("/usr/sbin/matchpathcon")
             return nil
         end
-        context = %x{/usr/sbin/matchpathcon #{file} 2>&1}
-        if ($?.to_i >> 8) > 0
+        context = ""
+        begin
+            execpipe("/usr/sbin/matchpathcon #{file}") do |out|
+                out.each do |line|
+                    context << line
+                end
+            end
+        rescue Puppet::ExecutionFailure
             return nil
         end
         # For a successful match, matchpathcon returns two fields separated by
@@ -51,21 +71,18 @@ module Puppet::Util::SELinux
     # out to the three (or four) component parts.  Supports :seluser, :selrole,
     # :seltype, and on systems with range support, :selrange.
     def parse_selinux_context(component, context)
-        if context == "unlabeled"
+        if context.nil? or context == "unlabeled"
             return nil
         end
-        unless context =~ /^[a-z0-9_]+:[a-z0-9_]+:[a-z0-9_]+(:[a-z0-9_])?/
+        unless context =~ /^([a-z0-9_]+):([a-z0-9_]+):([a-z0-9_]+)(?::([a-zA-Z0-9:,._-]+))?/
             raise Puppet::Error, "Invalid context to parse: #{context}"
         end
-        bits = context.split(':')
         ret = {
-            :seluser => bits[0],
-            :selrole => bits[1],
-            :seltype => bits[2]
+            :seluser => $1,
+            :selrole => $2,
+            :seltype => $3,
+            :selrange => $4,
         }
-        if bits.length == 4
-            ret[:selrange] = bits[3]
-        end
         return ret[component]
     end
 
@@ -73,6 +90,9 @@ module Puppet::Util::SELinux
     # only a single component or update the entire context.  It is just a
     # wrapper around the chcon command.
     def set_selinux_context(file, value, component = false)
+        unless selinux_support?
+            return nil
+        end
         case component
             when :seluser
                 flag = "-u"
@@ -91,7 +111,9 @@ module Puppet::Util::SELinux
         unless retval
             error = Puppet::Error.new("failed to chcon %s" % [@resource[:path]])
             raise error
+            return false
         end
+        return true
     end
 
     # Since this call relies on get_selinux_default_context it also needs a
@@ -107,7 +129,8 @@ module Puppet::Util::SELinux
         cur_context = get_selinux_current_context(file)
         if new_context != cur_context
             set_selinux_context(file, new_context)
+            return new_context
         end
-        return new_context
+        return nil
     end
 end

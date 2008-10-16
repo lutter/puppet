@@ -1,9 +1,43 @@
-0.24.x
+0.24.6
+    Fixed #1646 - service puppet status does not work as non-root 
+    on redhat system
+
+    Fixed #1649 - Updated OSX package cleanup
+  
+    Fixed #1647 - puppetdoc -r providers now working again
+
+    Fixed #1639 - uninitialized constant Puppet::Type::User::ProviderUseradd
+
+    Fixed #1637 - With an inexistant (global) templatedir, modules 
+    can't access their templates
+
+    Fixed #1202 - Collection attribute matching doesn't parse arrays
+
+    Fixed #1473 - Puppetd stops with error after puppetmasterd 
+    is unavailable
+
+    Fixed #1354 - yum provider problems with RHEL 3
+
+    Fixed #1633 - Added support for --detailed-exits to bin/puppet
+
+    Fixed #381 - Allow Allow multiple overrides in one statement
+
+    Fixing #947 - pluginsync no longer fails poorly when no plugins exist
+
+    Fixed #981 - Removed 'Adding aliases' info message
+    
+    Fixing #1089 - Log messages are now tagged with the log level,
+    making it easier to match messages in the 'tagmail' report.
+    
+    Fixing #1098 - Multiline strings now correctly increment the line count
+
     Fixing #1614 - Environments no longer have to be listed out
 
-    Fixed #1628 - Changed node search to use certname rather than Facter hostname
+    Fixed #1628 - Changed node search to use certname rather than Facter 
+    hostname
     
-    Fixed #1613 - The client environment will be substituted when looking up settings.
+    Fixed #1613 - The client environment will be substituted when looking 
+    up settings.
 
     Updated puppet binary documentation 
 
@@ -34,6 +68,8 @@
     Fixed #791 - You should now be able to create and find a user/group in one transaction.
 
     Fixed #1610 - Raise "Filebucketed" messages to Notice priority
+    
+    FIxed #1530 - ssh_authorized_keys provider does not crash anymore on SSH type 1 keys
 
     Added a number of confines to package providers
 

@@ -70,7 +70,9 @@ class Puppet::Network::Handler
             mount.debug("Describing %s for %s" % [url, client]) if client
 
             # use the mount to resolve the path for us.
-            metadata = Puppet::FileServing::Metadata.new(url, :path => mount.file_path(path, client), :links => links)
+            return "" unless full_path = mount.file_path(path, client)
+
+            metadata = Puppet::FileServing::Metadata.new(url, :path => full_path, :links => links)
 
             return "" unless metadata.exist?
 
@@ -651,8 +653,6 @@ class Puppet::Network::Handler
             # and "bad batch".
             #
             def list(relpath, recurse, ignore, client = nil)
-                require 'puppet/file_serving'
-                require 'puppet/file_serving/fileset'
                 abspath = file_path(relpath, client)
                 if FileTest.exists?(abspath)
                     if FileTest.directory?(abspath) and recurse
@@ -665,6 +665,8 @@ class Puppet::Network::Handler
             end
 
             def reclist(abspath, recurse, ignore)
+                require 'puppet/file_serving'
+                require 'puppet/file_serving/fileset'
                 args = { :recurse => recurse, :links => :follow }
                 args[:ignore] = ignore if ignore
                 fs = Puppet::FileServing::Fileset.new(abspath, args)
@@ -710,7 +712,7 @@ class Puppet::Network::Handler
             end
             
             def file_path(relpath, client = nil)
-                mod = valid_modules.map { |m| mod_path_exists?(m, relpath, client) ? m : nil }.compact.first
+                return nil unless mod = valid_modules.map { |m| mod_path_exists?(m, relpath, client) ? m : nil }.compact.first
                 mod_file_path(mod, relpath, client)
             end
 
@@ -718,9 +720,16 @@ class Puppet::Network::Handler
             def list(relpath, recurse, ignore, client = nil)
                 result = []
                 valid_modules.each do |m|
-                    ary = reclist(mod_file_path(m, relpath, client), nil, recurse, ignore)
-                    ary = [] if ary.nil?
-                   result += ary
+                    modpath = mod_file_path(m, relpath, client)
+                    if FileTest.exists?(modpath)
+                        if FileTest.directory?(modpath) and recurse
+                            ary = reclist(modpath, recurse, ignore)
+                            ary = [] if ary.nil?
+                            result += ary
+                        else
+                            result += [["/", File.stat(modpath).ftype]]
+                        end
+                    end
                 end
                 result
             end
