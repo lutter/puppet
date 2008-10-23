@@ -6,7 +6,11 @@
 # are available.  At this time (2008-09-26) these bindings aren't bundled on
 # any SELinux-using distribution I know of.
 
+require 'puppet/util'
+
 module Puppet::Util::SELinux
+
+    include Puppet::Util
 
     def selinux_support?
         FileTest.exists?("/selinux/enforce")
@@ -20,7 +24,7 @@ module Puppet::Util::SELinux
         end
         context = ""
         begin
-            execpipe("stat -c %C #{file}") do |out|
+            execpipe("/usr/bin/stat -c %C #{file}") do |out|
                 out.each do |line|
                     context << line
                 end
@@ -103,16 +107,15 @@ module Puppet::Util::SELinux
             when :selrange
                 flag = "-l"
             else
-                flag = ""
+                flag = nil
         end
 
-        Puppet.debug "Running chcon #{flag} #{value} #{file}"
-        retval = system("chcon #{flag} #{value} #{file}")
-        unless retval
-            error = Puppet::Error.new("failed to chcon %s" % [@resource[:path]])
-            raise error
-            return false
+        if flag.nil?
+            cmd = ["/usr/bin/chcon","-h",value,file]
+        else
+            cmd = ["/usr/bin/chcon","-h",flag,value,file]
         end
+        execute(cmd)
         return true
     end
 
