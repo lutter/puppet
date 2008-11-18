@@ -24,6 +24,7 @@ project = Rake::RedLabProject.new("puppet") do |p|
         'lib/puppet/**/*.rb',
         'lib/puppet/**/*.py',
         'test/**/*',
+        'spec/**/*',
         'bin/**/*',
         'ext/**/*',
         'examples/**/*',
@@ -33,10 +34,6 @@ project = Rake::RedLabProject.new("puppet") do |p|
     p.filelist.exclude("bin/pi")
 
     p.add_dependency('facter', '1.1.0')
-
-    #p.epmhosts = %w{culain}
-    #p.sunpkghost = "sol10b"
-    #p.rpmhost = "fedora1"
 end
 
 if project.has?(:gem)
@@ -49,7 +46,6 @@ if project.has?(:gem)
         task.executables = ["puppet", "puppetd", "puppetmasterd", "puppetdoc",
                          "puppetca", "puppetrun", "ralsh"]
         task.default_executable = "puppet"
-        task.autorequire = 'puppet'
 
         #### Documentation and testing.
 
@@ -61,14 +57,6 @@ if project.has?(:gem)
             '--line-numbers'
         task.test_file = "test/Rakefile"
         task.author = "Luke Kanies"
-    end
-end
-
-if project.has?(:epm)
-    project.mkepmtask do |task|
-        task.bins = FileList.new("bin/puppet", "bin/puppetca")
-        task.sbins = FileList.new("bin/puppetmasterd", "bin/puppetd")
-        task.rubylibs = FileList.new('lib/**/*')
     end
 end
 

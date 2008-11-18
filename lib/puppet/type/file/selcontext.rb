@@ -38,7 +38,9 @@ module Puppet
                 return nil
             end
             property_default = self.parse_selinux_context(property, context)
-            self.debug "Found #{property} default '#{property_default}' for #{@resource[:path]}"
+            if not property_default.nil?
+                self.debug "Found #{property} default '#{property_default}' for #{@resource[:path]}"
+            end
             return property_default
         end
 
@@ -48,6 +50,13 @@ module Puppet
                 unless stat
                     return nil
                 end
+            end
+
+            selcontext = self.should
+
+            if selcontext == :absent
+                # This is only valid for create states...
+                return nil
             end
 
             self.set_selinux_context(@resource[:path], @should, name)
