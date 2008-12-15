@@ -1,4 +1,90 @@
-0.24.x
+0.24.7
+    Fixed #1804 - Added VDev and MultiVDev properties to the ZPool type
+
+    Fixed #1496 - nagios_servicedependency needs a unique host_name?
+
+    Fixed #1420 - nagios_serviceescalation not allowing host_name more than one type
+
+    Bug #1803 Zfs should auto require the ancestor file systems
+
+    Refactor #1802 Use 'zfs get -H -o value' instead of parsing output for value
+
+    Fixing #1800 - tidy now correctly ignores missing files and directories
+
+    Fixing #1794 - returning sync when it is already initialized
+
+    Fixing #1750 again - All of the properties and now :ensure check replace?
+
+    Deprecate the NetInfo nameservice provider. Use directoryservice instead
+
+    Add macauthorization type
+
+    Fixing #1703 - using a mutex around the sending of the tagmails
+
+    Fix #1788 - allow rspec rake to run only some tests
+
+    Fixing the AST constant warnings, using a variable instead of a constant
+
+    Feature #1696 Add support for branded zones
+
+    Feature #1783 - Add ZFS support
+
+    type/mcx.rb Feature #1026 - MCX Type
+
+    Fixing #1749 - Splay now hopefully behaves "better" for small values
+
+    Fix #1741 - Add inline_template function
+
+    Slight denormalisation to store a host's environment as a first class
+
+    Added Rake :ci namespace and CI tasks
+
+    Refactoring the thread-safety in Puppet::Util
+
+    Removing the included testing gems; you must now install them yourself
+
+    Refactoring of SELinux functions to use native Ruby SELinux interface
+
+    Removing all mention of EPM, RPM, or Sun packages.
+
+    Fixed #1496 - nagios_servicedependency needs a unique host_name?
+
+    Fixed #1420 - nagios_serviceescalation not allowing host_name more than one type
+
+    Fixed #1695 - Solaris 10 zone provider doesn't properly handle unknown zone attributes in newer releases
+
+    Fixed #1776 - Trivial fix for gentoo service provider
+
+    Fixed #1767 - Minor fix to emacs mode
+
+    Fixed #1711 - fileserver test fails due to incorrect mocking
+
+    Fixed #1751 - Mac OS X DirectoryService nameservice provider support for 
+    plist output and password hash fil 
+   
+    Fixed #1752 - Add an optional argument to Puppet::Util.execute to determine 
+    whether stderr and stdout are combined in the output
+    
+    Added versionable feature to the RPM provider
+    
+    Fixed #1668 - puppetca can't clean unsigned certs
+
+    Moved RRD feature from util/metric.rb to feature/base.rb
+
+    Fixed #1735 and #1747 - Fixes to confine system
+
+    Fixed #1681 - Add filesystem type check to test for per-file SELinux context support
+
+    Fixed #1746 - Sync SELinux file attributes after file contents created/modified
+
+    Replaced SELInux calls to binaries with Ruby SELinux bindings
+
+    Fixed #1748 - Include spec directory in packages
+
+    Fixes #1672 - unsafe crontab handling in Solaris
+
+    Fixed #1718 - Added preseed to apt uninstall and purge
+
     Fixed #1739 - Added uninstall functionality to yum provider
 
     Fixed #1710 - Spurious output in test run
@@ -19,6 +105,13 @@
 
     Removed conf/debian directory - Debian packaging information 
     now maintained downstream
+
+    Added augeas type
+
+    Added support for @doc type and manifest documentation support - see:
+    http://reductivelabs.com/trac/puppet/wiki/PuppetManifestDocumentation
+
+    Added multiline comment support
 
 0.24.6
     Adding support to the user type for: profiles, auths, project, 

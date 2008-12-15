@@ -54,6 +54,22 @@ describe user do
         end
     end
 
+    list_properties = [:groups, :roles, :auths]
+
+    list_properties.each do |property|
+        it "should have a list '%s'" % property do
+            user.attrclass(property).ancestors.should be_include(Puppet::Property::List)
+        end
+    end
+
+    it "should have an ordered list 'profiles'" do
+        user.attrclass(:profiles).ancestors.should be_include(Puppet::Property::OrderedList)
+    end
+
+    it "should have key values 'keys'" do
+        user.attrclass(:keys).ancestors.should be_include(Puppet::Property::KeyValue)
+    end
+
     describe "when retrieving all current values" do
         before do
             @user = user.create(:name => "foo", :uid => 10, :gid => 10)
@@ -161,6 +177,26 @@ describe user do
             gid.should.must == "foo"
         end
 
+        describe "when testing whether in sync" do
+            before do
+                @gid = user.attrclass(:gid).new(:resource => @resource, :should => %w{foo bar})
+            end
+
+            it "should return true if any of the specified groups are equal to the current integer" do
+                Puppet::Util.expects(:gid).with("foo").returns 300
+                Puppet::Util.expects(:gid).with("bar").returns 500
+
+                @gid.must be_insync(500)
+            end
+
+            it "should return false if none of the specified groups are equal to the current integer" do
+                Puppet::Util.expects(:gid).with("foo").returns 300
+                Puppet::Util.expects(:gid).with("bar").returns 500
+
+                @gid.should_not be_insync(700)
+            end
+        end
+
         describe "when syncing" do
             before do
                 @gid = user.attrclass(:gid).new(:resource => @resource, :should => %w{foo bar})
@@ -200,6 +236,25 @@ describe user do
         it "should support a :role value for ensure" do
             @ensure = user.attrclass(:ensure).new(:resource => @resource)
             lambda { @ensure.should = :role }.should_not raise_error
+        end
+    end
+
+    describe "when user has roles" do
+        it "should autorequire roles" do
+            #this is a little funky because the autorequire depends on a property with a feature
+            testuser = Puppet.type(:user).create(:name => "testuser")
+            testuser.provider.class.expects(:feature?).with(:manages_solaris_rbac).returns(true)
+            testuser[:roles] = "testrole"
+
+            testrole = Puppet.type(:user).create(:name => "testrole")
+
+            config = Puppet::Node::Catalog.new :testing do |conf|
+                [testuser, testrole].each { |resource| conf.add_resource resource }
+            end
+
+            rel = testuser.autorequire[0]
+            rel.source.ref.should == testrole.ref
+            rel.target.ref.should == testuser.ref
         end
     end
 end

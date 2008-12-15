@@ -10,6 +10,8 @@ module Puppet
 module Util
     require 'benchmark'
     
+    # These are all for backward compatibility -- these are methods that used
+    # to be in Puppet::Util but have been moved into external modules.
     require 'puppet/util/posix'
     extend Puppet::Util::POSIX
 
@@ -61,40 +63,6 @@ module Util
                 rescue
                     $stderr.puts "could not change to user %s" % user
                     exit(74)
-                end
-            end
-        end
-    end
-
-    # Create a shared lock for reading
-    def self.readlock(file)
-        self.sync(file).synchronize(Sync::SH) do
-            File.open(file) { |f|
-                f.lock_shared { |lf| yield lf }
-            }
-        end
-    end
-
-    # Create an exclusive lock for writing, and do the writing in a
-    # tmp file.
-    def self.writelock(file, mode = 0600)
-        tmpfile = file + ".tmp"
-        unless FileTest.directory?(File.dirname(tmpfile))
-            raise Puppet::DevError, "Cannot create %s; directory %s does not exist" %
-                [file, File.dirname(file)]
-        end
-        self.sync(file).synchronize(Sync::EX) do
-            File.open(file, "w", mode) do |rf|
-                rf.lock_exclusive do |lrf|
-                    File.open(tmpfile, "w", mode) do |tf|
-                        yield tf
-                    end
-                    begin
-                        File.rename(tmpfile, file)
-                    rescue => detail
-                        Puppet.err "Could not rename %s to %s: %s" %
-                            [file, tmpfile, detail]
-                    end
                 end
             end
         end
@@ -268,7 +236,10 @@ module Util
 
     # Execute the desired command, and return the status and output.
     # def execute(command, failonfail = true, uid = nil, gid = nil)
-    def execute(command, arguments = {:failonfail => true})
+    # :combine sets whether or not to combine stdout/stderr in the output
+    # :stdinfile sets a file that can be used for stdin. Passing a string
+    # for stdin is not currently supported.
+    def execute(command, arguments = {:failonfail => true, :combine => true})
         if command.is_a?(Array)
             command = command.flatten.collect { |i| i.to_s }
             str = command.join(" ")
@@ -301,9 +272,13 @@ module Util
 
         # The idea here is to avoid IO#read whenever possible.
         output_file="/dev/null"
+        error_file="/dev/null"
         if ! arguments[:squelch]
             require "tempfile"
             output_file = Tempfile.new("puppet")
+            if arguments[:combine]
+                error_file=output_file
+            end
         end
 
         oldverb = $VERBOSE
@@ -317,9 +292,14 @@ module Util
             # Child process executes this
             Process.setsid
             begin
-                $stdin.reopen("/dev/null")
+                if arguments[:stdinfile]
+                    $stdin.reopen(arguments[:stdinfile])
+                else
+                    $stdin.reopen("/dev/null")
+                end
                 $stdout.reopen(output_file)
-                $stderr.reopen(output_file)
+                $stderr.reopen(error_file)
+
                 3.upto(256){|fd| IO::new(fd).close rescue nil} 
                 if arguments[:gid]
                     Process.egid = arguments[:gid]
@@ -461,4 +441,3 @@ require 'puppet/util/execution'
 require 'puppet/util/logging'
 require 'puppet/util/package'
 require 'puppet/util/warnings'
-

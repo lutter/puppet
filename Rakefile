@@ -137,7 +137,7 @@ desc "Run the specs under spec/"
 task :spec do
     require 'spec'
     require 'spec/rake/spectask'
-    require 'rcov'
+    # require 'rcov'
     Spec::Rake::SpecTask.new do |t|
          #   t.rcov = true
          t.spec_opts = ['--format','s', '--loadby','mtime']
@@ -148,6 +148,29 @@ end
 desc "Run the unit tests"
 task :unit do
     sh "cd test; rake"
+end
+
+namespace :ci do
+
+  desc "Run the CI prep tasks"
+  task :prep do
+    require 'rubygems'
+    gem 'ci_reporter'
+    require 'ci/reporter/rake/rspec'
+    require 'ci/reporter/rake/test_unit'
+    ENV['CI_REPORTS'] = 'results'
+  end
+
+  desc "Run CI Unit tests"
+  task :unit => [:prep, 'ci:setup:testunit'] do
+     sh "cd test; rake test; exit 0"
+  end
+
+  desc "Run CI RSpec tests"
+  task :spec => [:prep, 'ci:setup:rspec'] do
+     sh "cd spec; rake all; exit 0"
+  end
+
 end
 
 desc "Send patch information to the puppet-dev list"
@@ -185,3 +208,21 @@ task :mail_patches do
     # Finally, clean up the patches
     sh "rm 00*.patch"
 end
+
+    desc "Create a changelog based on your git commits."
+    task :changelog do
+ 
+      CHANGELOG_DIR = "#{Dir.pwd}"
+ 
+      mkdir(CHANGELOG_DIR) unless File.directory?(CHANGELOG_DIR)
+ 
+      change_body=`git log --pretty=format:'%aD%n%an <%ae>%n%s%n'`
+
+      File.open(File.join(CHANGELOG_DIR, "CHANGELOG.git"), 'w') do |f|
+        f << change_body 
+      end
+ 
+      # Changelog commit
+      `git add #{CHANGELOG_DIR}/CHANGELOG.git`
+      `git commit -m "Update CHANGELOG.git"`
+    end
