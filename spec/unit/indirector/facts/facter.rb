@@ -70,7 +70,32 @@ describe Puppet::Node::Facts::Facter do
         end
     end
 
-    describe Puppet::Node::Facts::Facter, " when loading facts from the factpath" do
-        it "should load every fact in each factpath directory"
+    describe Puppet::Node::Facts::Facter, "when loading facts from disk" do
+        it "should load each directory in the Fact path" do
+            Puppet.settings.stubs(:value).returns "foo"
+            Puppet.settings.expects(:value).with(:factpath).returns("one%stwo" % File::PATH_SEPARATOR)
+
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("one", "fact")
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("two", "fact")
+
+            Puppet::Node::Facts::Facter.loadfacts
+        end
+
+        it "should load all facts from the modules" do
+            Puppet.settings.stubs(:value).returns "foo"
+            Puppet::Node::Facts::Facter.stubs(:loaddir)
+
+            Puppet.settings.expects(:value).with(:modulepath).returns("one%stwo" % File::PATH_SEPARATOR)
+
+            Dir.expects(:glob).with("one/*/plugins/facter").returns %w{oneA oneB}
+            Dir.expects(:glob).with("two/*/plugins/facter").returns %w{twoA twoB}
+
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("oneA", "fact")
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("oneB", "fact")
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("twoA", "fact")
+            Puppet::Node::Facts::Facter.expects(:loaddir).with("twoB", "fact")
+
+            Puppet::Node::Facts::Facter.loadfacts
+        end
     end
 end

@@ -16,7 +16,7 @@ elseif exists("b:current_syntax")
   finish
 endif
 
-syn region  puppetDefine        start="^\s*\(class\|define\|site\|node\)" end="{" contains=puppetDefType,puppetDefName,puppetDefArguments
+syn region  puppetDefine        start="^\s*\(class\|define\|node\)" end="{" contains=puppetDefType,puppetDefName,puppetDefArguments
 syn keyword puppetDefType       class define site node inherits contained
 syn keyword puppetInherits      inherits contained
 syn region  puppetDefArguments  start="(" end=")" contains=puppetArgument
@@ -49,6 +49,7 @@ syn keyword puppetControl    case default
 
 " comments last overriding everything else
 syn match   puppetComment            "\s*#.*$" contains=puppetTodo
+syn region  puppetComment            start="/\*" end="\*/" contains=puppetTodo extend
 syn keyword puppetTodo               TODO NOTE FIXME XXX contained
 
 " Define the default highlighting.
