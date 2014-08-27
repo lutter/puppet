@@ -36,7 +36,7 @@ group(:development, :test) do
   # Mocha is not compatible across minor version changes; because of this only
   # versions matching ~> 0.10.5 are supported. All other versions are unsupported
   # and can be expected to fail.
-  gem "mocha", "~> 0.10.5", :require => false
+  gem "mocha"# , "~> 0.10.5", :require => false
 
   gem "yarjuf", "~> 1.0"
 
