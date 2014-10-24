@@ -22,6 +22,7 @@ token RENDER_STRING RENDER_EXPR EPP_START EPP_END EPP_END_TRIM
 token FUNCTION
 token PRIVATE ATTR TYPE
 token LOW
+token PRODUCES CONSUMES
 
 prechigh
   left  HIGH
@@ -477,14 +478,29 @@ attribute_operations
 # Produces Model::Definition
 #
 definition_expression
-  : DEFINE classname parameter_list LBRACE opt_statements RBRACE {
-      result = add_definition(Factory.DEFINITION(classname(val[1][:value]), val[2], val[4]))
-      loc result, val[0], val[5]
+  : DEFINE classname parameter_list capability LBRACE opt_statements RBRACE {
+      result = add_definition(Factory.DEFINITION(classname(val[1][:value]), val[2], val[3], val[5]))
+      loc result, val[0], val[6]
       # New lexer does not keep track of this, this is done in validation
       if @lexer.respond_to?(:'indefine=')
         @lexer.indefine = false
       end
     }
+
+#---CAPABILITY
+#
+# Produces Model::Capability
+#
+capability
+  : nil
+  | produces_or_consumes classname parameter_list {
+    result = Factory.CAPABILITY(val[1][:value], val[0][:value], val[2])
+    loc result, val[0], val[2]
+  }
+
+produces_or_consumes:
+  : PRODUCES { result = val[0] }
+  | CONSUMES { result = val[0] }
 
 #---HOSTCLASS
 #
@@ -733,6 +749,8 @@ keyword
   | ATTR
   | FUNCTION
   | PRIVATE
+  | PRODUCES
+  | CONSUMES
 
 nil
   : { result = nil}

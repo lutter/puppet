@@ -242,9 +242,18 @@ class Puppet::Pops::Model::ModelTreeDumper < Puppet::Pops::Model::TreeDumper
     result
   end
 
+  def dump_Capability o
+    result = [o.kind, o.name]
+    result << ["parameters"] + o.parameters.collect {|p| do_dump(p) } if o.parameters.size > 0
+    result
+  end
+
   def dump_ResourceTypeDefinition o
     result = dump_NamedDefinition(o)
     result[0] = 'define'
+    body = result.pop
+    result << do_dump(o.capability)
+    result << body
     result
   end
 

@@ -230,6 +230,22 @@ class Puppet::Pops::Model::Factory
     o
   end
 
+  def build_ResourceTypeDefinition(o, name, parameters, capability, body)
+    parameters.each {|p| o.addParameters(build(p)) }
+    b = f_build_body(body)
+    o.body = b.current if b
+    o.capability = build(capability) if capability
+    o.name = name
+    o
+  end
+
+  def build_Capability(o, name, kind, parameters)
+    parameters.each {|p| o.addParameters(build(p)) }
+    o.name = name
+    o.kind = kind.intern
+    o
+  end
+
   # @param o [Model::NodeDefinition]
   # @param hosts [Array<Expression>] host matches
   # @param parent [Expression] parent node matcher
@@ -750,8 +766,12 @@ class Puppet::Pops::Model::Factory
     new(Model::HostClassDefinition, name, parameters, parent, body)
   end
 
-  def self.DEFINITION(name, parameters, body)
-    new(Model::ResourceTypeDefinition, name, parameters, body)
+  def self.DEFINITION(name, parameters, capability, body)
+    new(Model::ResourceTypeDefinition, name, parameters, capability, body)
+  end
+
+  def self.CAPABILITY(name, kind, parameters)
+    new(Model::Capability, name, kind, parameters)
   end
 
   def self.LAMBDA(parameters, body)

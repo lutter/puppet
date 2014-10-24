@@ -128,13 +128,13 @@ describe "egrammar parsing containers" do
 
   context "When the parser parses define" do
     it "define foo {}" do
-      dump(parse("define foo {}")).should == "(define foo ())"
+      dump(parse("define foo {}")).should == "(define foo () ())"
     end
 
     it "class foo { define bar {}}" do
       dump(parse("class foo {define bar {}}")).should == [
         "(class foo (block",
-        "  (define foo::bar ())",
+        "  (define foo::bar () ())",
         "))"
         ].join("\n")
     end
@@ -142,31 +142,31 @@ describe "egrammar parsing containers" do
     it "define foo { define bar {}}" do
       # This is illegal, but handled as part of validation
       dump(parse("define foo { define bar {}}")).should == [
-        "(define foo (block",
-        "  (define bar ())",
+        "(define foo () (block",
+        "  (define bar () ())",
         "))"
         ].join("\n")
     end
 
     it "define foo::bar {}" do
-      dump(parse("define foo::bar {}")).should == "(define foo::bar ())"
+      dump(parse("define foo::bar {}")).should == "(define foo::bar () ())"
     end
 
     it "define foo($a) {}" do
-      dump(parse("define foo($a) {}")).should == "(define foo (parameters a) ())"
+      dump(parse("define foo($a) {}")).should == "(define foo (parameters a) () ())"
     end
 
     it "define foo($a, $b) {}" do
-      dump(parse("define foo($a, $b) {}")).should == "(define foo (parameters a b) ())"
+      dump(parse("define foo($a, $b) {}")).should == "(define foo (parameters a b) () ())"
     end
 
     it "define foo($a, $b=10) {}" do
-      dump(parse("define foo($a, $b=10) {}")).should == "(define foo (parameters a (= b 10)) ())"
+      dump(parse("define foo($a, $b=10) {}")).should == "(define foo (parameters a (= b 10)) () ())"
     end
 
     it "define foo {$a = 10 $b = 20}" do
       dump(parse("define foo {$a = 10 $b = 20}")).should == [
-        "(define foo (block",
+        "(define foo () (block",
         "  (= $a 10)",
         "  (= $b 20)",
         "))"
