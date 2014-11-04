@@ -1256,6 +1256,14 @@ class Type
     end
   end
 
+  newmetaparam(:produce) do
+    desc "Specify the capability that this provides.  This both enables the capability, and specifies the name of the instance."
+  end
+
+  newmetaparam(:consume) do
+    desc "Specify the capability that this resource requires.  This both enables the capability, and specifies the name of the instance."
+  end
+
   newmetaparam(:schedule) do
     desc "A schedule to govern when Puppet is allowed to manage this resource.
       The value of this metaparameter must be the `name` of a `schedule`
