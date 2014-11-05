@@ -282,9 +282,25 @@ module Puppet::Pops::Model
     contains_one_uni 'body', Expression
   end
 
+  CapabilityKind = RGen::MetamodelBuilder::DataTypes::Enum.new(
+    :literals => [:consumes, :produces],
+    :name => 'CapabilityKind')
+
+  # A capability attached to a define, i.e. the produces/consumes clause
+  # from the 'define' statement
+  class Capability < Positioned
+    has_attr 'name', String, :lowerBound => 1
+    # Either 'consumes' or 'produces'
+    # @todo lutter 2014-10-24: there's probably a better way to
+    # model an enum here
+    has_attr 'kind', CapabilityKind, :lowerBound => 1
+    contains_many_uni 'parameters', Parameter
+  end
+
   # A resource type definition (a 'define' in the DSL).
   #
   class ResourceTypeDefinition < NamedDefinition
+    contains_one_uni 'capability', Capability
   end
 
   # A node definition matches hosts using Strings, or Regular expressions. It may inherit from
@@ -569,7 +585,7 @@ module Puppet::Pops::Model
   #
   # A model that will be shared across different platforms should use char_offsets true as the byte
   # offsets are platform and encoding dependent.
-  # 
+  #
   class Program < PopsObject
     contains_one_uni 'body', Expression
     has_many 'definitions', Definition
