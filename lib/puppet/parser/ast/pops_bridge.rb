@@ -159,6 +159,15 @@ class Puppet::Parser::AST::PopsBridge
       unless is_nop?(o.body)
         args[:code] = Expression.new(:value => o.body)
       end
+      unless is_nop?(o.capability)
+        cap = o.capability
+        values = cap.parameters.collect { |p| instantiate_Parameter(p) }
+        args[:capability] = {
+          :name => cap.name,
+          :type => cap.kind,
+          :values => values
+        }
+      end
       @ast_transformer.merge_location(args, o)
     end
 
