@@ -235,7 +235,118 @@ class Puppet::Parser::Resource < Puppet::Resource
     cap_resource
   end
 
+  # Fill resource params from a capability
+  #
+  # This backs 'consumes => Sql[one]'
+  def add_capability_parameters
+    return unless resource_type.consumes
+    cap_type, values = resource_type.consumes
+
+    # This tells us that they actually want the capability sought,
+    # and also what name to look for
+    if consumes = self[:consume]
+      cap_resource = find_capability(cap_type, consumes.title)
+      unless cap_resource
+        catalog.resources.each { |res| puts "=> #{res.ref}" }
+        raise "Could not find capability #{cap_type}[#{self.name}] for #{self}"
+      end
+
+      # Add the capability as a dependency for the consuming resource.
+      self[:require] = cap_resource
+
+      # And to the catalog, if it happens to be a remote one
+      unless catalog.resource(cap_resource.ref)
+        catalog.add_resource(cap_resource)
+      end
+    else
+      source_resource = nil
+      # XXX No support for a dependency array
+      [:require, :subscribe].find do |name|
+        next unless ref = self[name]
+        source_resource = catalog.resource(ref.type, ref.title) || raise("Could not find required resource from #{name}")
+      end
+
+      # Yuck.  Look through all known resources for a dependency :/
+      # XXX No support for a dependency array
+      unless source_resource
+        catalog.resources.each do |resource|
+          [:before, :notify].each do
+            next unless ref = resource[name]
+            source_resource = catalog.resource(ref.type, ref.title) || raise("Could not find required resource from #{name}")
+          end
+        end
+      end
+
+      if source_resource
+        unless source_resource.resource_type.produces[0] == resource_type.consumes[0]
+          raise "Source resource #{source_resource} produces #{source_resource.resource_type.produces[0]} but #{self} consumes #{resource_type.consumes[0]}"
+        end
+        cap_resource = source_resource.capability_resource
+      else
+        puts "No capabilities for #{self}"
+        return
+      end
+    end
+
+    map = {}
+    if values
+      values.each do |name, value|
+        map[name] = value.safeevaluate(scope)
+      end
+    end
+
+    cap_resource.to_hash.each do |param, value|
+      mapped_param = map[param.to_s] || param
+      next if mapped_param.to_s == "name"
+      next if Puppet::Type.metaparam?(mapped_param)
+      self[mapped_param] = value
+    end
+  end
+
   private
+
+  # Lookup a capability by type/title
+  #
+  # Looks first in the current node's catalog, then in PuppetDB
+  def find_capability(cap_type, cap_title)
+    # @todo lutter 2014-11-04: we unconditionally prefer the local catalog
+    # to PDB here; that makes it possible that the user violates
+    # per-environment uniqueness of the capability
+    unless cap_resource = catalog.resource(cap_type, cap_title)
+      # @todo lutter 2014-11-04: this should use Puppet::Util::Puppetdb::Http
+      require 'net/http'
+      require 'cgi'
+      http = Net::HTTP.new("localhost", 8080)
+      query = '["and", ["=", "type", "%s"], ["=", "title", "%s"]]' % [cap_type.capitalize, cap_title]
+      response = http.get("/v3/resources?query=#{CGI.escape(query)}", { "Accept" => 'application/json'})
+
+      json = response.body
+
+      # @todo lutter 2014-11-04: use just JSON
+      data = PSON.parse(json)
+      return nil if data.empty?
+
+      # @todo lutter 2014-11-04: check that data has exactly one entry
+
+      # turn data into resource
+      data.each do |hash|
+        next unless params = hash["parameters"]
+        resource = Puppet::Resource.new(hash["type"], hash["title"])
+        real_type = Puppet::Type.type(resource.type) || raise("Could not find resource type #{resource.type}")
+        real_type.parameters.each do |param|
+          param = param.to_s
+          next if param == "name"
+          if value = params[param]
+            resource[param] = value
+          else
+            Puppet.debug "No capability value for #{resource}->#{param}"
+          end
+        end
+        return resource
+      end
+    end
+    cap_resource
+  end
 
   # Add default values from our definition.
   def add_defaults
