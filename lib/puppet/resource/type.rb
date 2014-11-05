@@ -128,6 +128,8 @@ class Puppet::Resource::Type
         code.safeevaluate(scope)
       end
     end
+
+    resource.define_capabilities
   end
 
   def initialize(type, name, options = {})

@@ -192,6 +192,49 @@ class Puppet::Parser::Resource < Puppet::Resource
     super || ((scope_resource = scope.resource) && scope_resource != self && scope_resource.tagged?(tags))
   end
 
+  def define_capabilities
+    if resource_type.produces && produces = self[:produce]
+      cap_resource = capability_resource(produces.title)
+      self[:before] = cap_resource
+      catalog.add_resource cap_resource
+    end
+  end
+
+  # Construct a capability resource from the params of this resource
+  #
+  # This backs the 'produce => Sql[one]' metaparam
+  def capability_resource(title = nil)
+    title ||= self.title
+
+    cap_type, values = resource_type.produces
+    map = {}
+    if values
+      values.each do |name, value|
+        map[value.safeevaluate(scope)] = name
+      end
+    end
+
+    unless type = Puppet::Type.type(cap_type)
+      raise "Could not find capability type #{cap_type}"
+    end
+
+    cap_resource = Puppet::Parser::Resource.new(cap_type, title, :scope => scope)
+
+    type.parameters.each do |param|
+      mapped_param = map[param.to_s] || param
+      next if mapped_param.to_s == "name"
+      next if Puppet::Type.metaparam?(mapped_param)
+
+      if value = self[mapped_param]
+        cap_resource[param] = value
+      else
+        raise "Could not find parameter #{param} required by capability #{ref} as #{mapped_param}"
+      end
+    end
+
+    cap_resource
+  end
+
   private
 
   # Add default values from our definition.
