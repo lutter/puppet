@@ -32,6 +32,13 @@ class Puppet::Resource::Type
   attr_accessor :file, :line, :doc, :code, :parent, :resource_type_collection
   attr_reader :namespace, :arguments, :behaves_like, :module_name
 
+  # Store one produce or consume capability here. The capability is stored
+  # as a Hash with the entries +:name+, +:kind+ (either +produces+ or
+  # +consumes+), and +:values+, a Hash that indicates how the resource's
+  # parameters and the capability's parameters should be mapped to each
+  # other
+  attr_reader :capability
+
   # Map from argument (aka parameter) names to Puppet Type
   # @return [Hash<Symbol, Puppet::Pops::Types::PAnyType] map from name to type
   #
@@ -142,6 +149,10 @@ class Puppet::Resource::Type
     @match = nil
 
     @module_name = options[:module_name]
+
+    # This only supports one capability, and a given type can either
+    # consume or produce, but not both. It's a prototype, yo
+    @capability = options[:capability]
   end
 
   # This is only used for node names, and really only when the node name
@@ -268,6 +279,19 @@ class Puppet::Resource::Type
 
     @parent_type
   end
+
+  def consumes
+    if capability and capability[:type] == :consumes
+      return [capability[:name], capability[:values]]
+    end
+  end
+
+  def produces
+    if capability and capability[:type] == :produces
+      return [capability[:name], capability[:values]]
+    end
+  end
+
 
   # Set any arguments passed by the resource as variables in the scope.
   def set_resource_parameters(resource, scope)
