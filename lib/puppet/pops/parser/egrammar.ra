@@ -23,6 +23,7 @@ token FUNCTION
 token PRIVATE ATTR TYPE
 token FUNCTION
 token LOW
+token APPLICATION
 
 prechigh
   left  HIGH
@@ -237,6 +238,9 @@ primary_expression
   | if_expression
   | unless_expression
   | definition_expression
+  # @todo lutter 2014-09-03: application declarations must be at the toplevel
+  # in a manifest
+  | application_expression
   | hostclass_expression
   | node_definition_expression
   | epp_render_expression
@@ -488,6 +492,13 @@ definition_expression
       end
     }
 
+#---APPLICATION
+application_expression
+  : APPLICATION classname parameter_list LBRACE opt_statements RBRACE {
+    result = Factory.APPLICATION(classname(val[1][:value]), val[2], val[4])
+    loc result, val[0], val[5]
+  }
+
 #---HOSTCLASS
 #
 # Produces Model::HostClassDefinition
@@ -734,6 +745,7 @@ keyword
   | ATTR
   | FUNCTION
   | PRIVATE
+  | APPLICATION
 
 nil
   : { result = nil}
