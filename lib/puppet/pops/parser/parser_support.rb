@@ -170,6 +170,15 @@ class Puppet::Pops::Parser::Parser
     definition
   end
 
+  def add_produces(produces)
+    name = produces.current.name
+    # @todo lutter 2015-03-10: should we move this to the checker ?
+    @definitions.find { |d| d.name == name } or
+      error(produces,
+            "produces clause refers to nonexistant definition '#{name}'")
+    add_definition(produces)
+  end
+
   # Transforms an array of expressions containing literal name expressions to calls if followed by an
   # expression, or expression list
   #

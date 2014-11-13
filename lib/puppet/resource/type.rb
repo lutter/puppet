@@ -28,6 +28,7 @@ class Puppet::Resource::Type
 
   attr_accessor :file, :line, :doc, :code, :parent, :resource_type_collection
   attr_reader :namespace, :arguments, :behaves_like, :module_name
+  attr_reader :produces
 
   # Map from argument (aka parameter) names to Puppet Type
   # @return [Hash<Symbol, Puppet::Pops::Types::PAnyType] map from name to type
@@ -139,6 +140,7 @@ class Puppet::Resource::Type
     @match = nil
 
     @module_name = options[:module_name]
+    @produces = []
   end
 
   # This is only used for node names, and really only when the node name

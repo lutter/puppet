@@ -252,6 +252,10 @@ class Puppet::Pops::Model::ModelTreeDumper < Puppet::Pops::Model::TreeDumper
     result
   end
 
+  def dump_ProducesDefinition o
+    ["produces", o.name, do_dump(o.resource)]
+  end
+
   def dump_ResourceOverrideExpression o
     form = o.form == :regular ? '' : o.form.to_s + "-"
     result = [form+"override", do_dump(o.resources), :indent]
