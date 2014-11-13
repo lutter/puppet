@@ -131,7 +131,9 @@ class Puppet::Pops::Parser::Lexer2
     "type"     => [:TYPE,     'type',     4],
     "attr"     => [:ATTR,     'attr',     4],
     "private"  => [:PRIVATE,  'private',  7],
-    "application" => [:APPLICATION, 'application', 11]
+    "application" => [:APPLICATION, 'application', 11],
+    "produces" => [:PRODUCES, 'produces', 8],
+    "consumes" => [:CONSUMES, 'consumes', 8]
   }
   KEYWORDS.each {|k,v| v[1].freeze; v.freeze }
   KEYWORDS.freeze
