@@ -106,6 +106,17 @@ class Puppet::Resource::Type
 
     resource.add_edge_to_stage
 
+    # This, somewhat magically, puts the produced resources into the catalog
+    # @todo lutter 2014-11-12: should they wind up in the catalog ? We
+    # could send them to PuppetDB separately, as something more
+    # special. There's no real need to send them to the agent
+    # @todo lutter 2014-11-12: should there be any dependency on +resource+ ?
+    # @todo lutter 2014-11-12: we need to somehow mark these resources so
+    # that we can distinguish them in PuppetDB from 'ordinary' resources
+    # @todo lutter 2014-11-12: check that each of these resources is
+    # actually a capability
+    produces.map { |prod| prod.safeevaluate(scope) }
+
     if code
       if @match # Only bother setting up the ephemeral scope if there are match variables to add into it
         begin
