@@ -607,19 +607,27 @@ Copyright (c) 2014 Puppet Labs, LLC Licensed under the Apache 2.0 License
 
     compiler.eval
 
+    env_graph = {:environment => 'development', :applications => {}}
     puts "Application instances:"
     compiler.applications.each do |app|
+      app_components = {}
       puts "  #{app.ref}"
       puts "    components:"
       app.mapping.components.each do |comp|
+        app_components[comp.ref] = {:produces => comp.produces.map(&:ref), :consumes => comp.consumes.map(&:ref)}
         puts " " * 6 + comp.inspect
       end
       puts "    mapping:"
       app.mapping.components_by_node.each do |node, comps|
+        comps.each do |comp|
+          app_components[comp.ref][:node] = node
+        end
         puts " " * 6 + "Node[#{node}] : [#{comps.map(&:to_s).join(",")}]"
       end
       puts
+      env_graph[:applications][app.ref] = app_components
     end
+    puts JSON.pretty_generate(env_graph)
 
     # Build the NodeGraph
     ng = NodeGraph.new
