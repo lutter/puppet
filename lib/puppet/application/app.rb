@@ -220,7 +220,7 @@ end
 class AppCompiler
   attr_reader :applications, :definitions, :resources
 
-  def initialize
+  def initialize(env)
     @@find_visitor ||= Puppet::Pops::Visitor.new(self, "find", 0, 0)
     @@eval_visitor ||= Puppet::Pops::Visitor.new(self, "eval", 1, 1)
     @@expand_visitor ||= Puppet::Pops::Visitor.new(self, "expand", 2, 2)
@@ -231,6 +231,8 @@ class AppCompiler
                              # (ResourceExpression), in the order in which
                              # they were parsed
     @locator = nil           # Will be filled in find_Program
+
+    @environment = env
 
     # All this setup is only here to use EvaluatingParser and Scope
     @parser  = Puppet::Pops::Parser::EvaluatingParser.new
@@ -489,7 +491,7 @@ class AppCompiler
     node = Puppet::Node.new(node_name)
     # @todo lutter 2014-11-17: don't hardcode the environment in which we
     # are working
-    node.environment = Puppet::Node::Environment.create(:development, [])
+    node.environment = Puppet::Node::Environment.create(@environment, [])
     compiler = Puppet::Parser::Compiler.new(node)
     @scope = Puppet::Parser::Scope.new(compiler)
     @scope.source = Puppet::Resource::Type.new(:node, 'node.example.com')
@@ -616,7 +618,7 @@ Copyright (c) 2014 Puppet Labs, LLC Licensed under the Apache 2.0 License
     # puts Puppet::Pops::Model::ModelTreeDumper.new.dump(ast)
 
     # Walk the AST and extract application definitions
-    compiler = AppCompiler.new
+    compiler = AppCompiler.new(:development)
     compiler.find(ast.current)
 
     compiler.eval
