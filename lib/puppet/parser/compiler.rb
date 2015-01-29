@@ -88,6 +88,15 @@ class Puppet::Parser::Compiler
       return
     end
 
+    if @current_app
+      # We are in the process of pulling application components out that
+      # apply to this node
+      Puppet.notice "Check #{resource}"
+      return unless @current_components.any? do |comp|
+        comp.type == resource.type && comp.title == resource.title
+      end
+    end
+
     @resources << resource
 
     # Note that this will fail if the resource is not unique.
@@ -139,6 +148,8 @@ class Puppet::Parser::Compiler
       Puppet::Util::Profiler.profile("Compile: Evaluated AST node", [:compiler, :evaluate_ast_node]) { evaluate_ast_node }
 
       Puppet::Util::Profiler.profile("Compile: Evaluated node classes", [:compiler, :evaluate_node_classes]) { evaluate_node_classes }
+
+      Puppet::Util::Profiler.profile("Compile: Evaluated node classes", [:compiler, :evaluate_applications]) { evaluate_applications }
 
       Puppet::Util::Profiler.profile("Compile: Evaluated generators", [:compiler, :evaluate_generators]) { evaluate_generators }
 
@@ -192,6 +203,44 @@ class Puppet::Parser::Compiler
 
     evaluate_classes(classes_with_params, @node_scope || topscope)
     evaluate_classes(classes_without_params, @node_scope || topscope)
+  end
+
+  def evaluate_applications
+    @applications.each do |app|
+      mapping = app.parameters[:nodes].value
+      components = []
+      mapping.each do |k,v|
+        k = [k] unless k.is_a?(Array)
+        v = [v] unless v.is_a?(Array)
+        k.each do |key|
+          v.each do |val|
+            key, val = val, key if val.type == "Node"
+            if key.type == "Node" && key.title == node.name
+              components << val
+            end
+          end
+        end
+      end
+      # @todo lutter 2015-01-28: We use @current_app and @curremt_comp to
+      # signal to the evaluator that we are in the middle of evaluating an
+      # application.
+      begin
+        @current_app = app
+        @current_components = components
+        unless @current_components.empty?
+          Puppet.notice "EVAL APP #{app} #{components.inspect}"
+          # Add the app itself since components mapped to the current node
+          # will have a containment edge for it
+          # @todo lutter 2015-01-28: the node mapping winds up in the
+          # catalog, but probably shouldn't
+          @catalog.add_resource(@current_app)
+          @current_app.evaluate
+        end
+      ensure
+        @current_app = nil
+        @current_components = nil
+      end
+    end
   end
 
   # Evaluates each specified class in turn. If there are any classes that 
