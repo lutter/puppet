@@ -2184,7 +2184,7 @@ module_eval(<<'.,.,', 'egrammar.ra', 485)
 
 module_eval(<<'.,.,', 'egrammar.ra', 496)
   def _reduce_137(val, _values, result)
-        result = Factory.APPLICATION(classname(val[1][:value]), val[2], val[4])
+        result = add_definition(Factory.APPLICATION(classname(val[1][:value]), val[2], val[4]))
     loc result, val[0], val[5]
   
     result
