@@ -94,6 +94,30 @@ class Puppet::Resource::Type
     return(klass == parent_type ? true : parent_type.child_of?(klass))
   end
 
+  # Evaluate the resources produced by the given resource. These resources are
+  # evaluated in a separate but identical scope from the rest of the resource.
+  def evaluate_produces(resource)
+    # Only defined types can produce capabilities
+    return unless definition?
+
+    scope = resource.scope.newscope(:namespace => namespace, :source => self, :resource => resource) unless resource.title == :main
+
+    set_resource_parameters(resource, scope)
+
+    # This, somewhat magically, puts the produced resources into the catalog
+    # @todo lutter 2014-11-12: should they wind up in the catalog ? We
+    # could send them to PuppetDB separately, as something more
+    # special. There's no real need to send them to the agent
+    # @todo lutter 2014-11-12: should there be any dependency on +resource+ ?
+    # @todo lutter 2014-11-12: check that each of these resources is
+    # actually a capability
+    produces.map do |prod|
+      produced_resource = prod.safeevaluate(scope).first
+      scope.catalog.add_edge(produced_resource, resource)
+      produced_resource
+    end
+  end
+
   # Now evaluate the code associated with this class or definition.
   def evaluate_code(resource)
 
@@ -107,25 +131,20 @@ class Puppet::Resource::Type
 
     resource.add_edge_to_stage
 
-    # This, somewhat magically, puts the produced resources into the catalog
-    # @todo lutter 2014-11-12: should they wind up in the catalog ? We
-    # could send them to PuppetDB separately, as something more
-    # special. There's no real need to send them to the agent
-    # @todo lutter 2014-11-12: should there be any dependency on +resource+ ?
-    # @todo lutter 2014-11-12: check that each of these resources is
-    # actually a capability
-    produces.map { |prod| prod.safeevaluate(scope) }.flatten.map do |res|
-      # Tag the produced resource so we can later distinguish it from
-      # copies of the resource that wind up in the catalogs of nodes that
-      # use this resource. We tag the resource with producer:<environment>,
-      # meaning produced resources need to be unique within their
-      # environment
-      # @todo lutter 2014-11-13: we would really like to use a dedicated
-      # metadata field to indicate the producer of a resource, but that
-      # requires changes to PuppetDB and its API; so for now, we just use
-      # tagging
-      scope.catalog.resource(res.type, res.title).tag("producer:#{scope.catalog.environment}")
+    # Tag the produced resource so we can later distinguish it from
+    # copies of the resource that wind up in the catalogs of nodes that
+    # use this resource. We tag the resource with producer:<environment>,
+    # meaning produced resources need to be unique within their
+    # environment
+    # @todo lutter 2014-11-13: we would really like to use a dedicated
+    # metadata field to indicate the producer of a resource, but that
+    # requires changes to PuppetDB and its API; so for now, we just use
+    # tagging
+    unless produces.empty?
+      resource.tag("producer:#{scope.catalog.environment}")
     end
+
+    evaluate_produces(resource)
 
     if code
       if @match # Only bother setting up the ephemeral scope if there are match variables to add into it
