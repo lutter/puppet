@@ -1,10 +1,7 @@
 require 'puppet/parser'
 require 'puppet/util/warnings'
 require 'puppet/util/errors'
-require 'puppet/util/inline_docs'
 require 'puppet/parser/ast/leaf'
-require 'puppet/parser/ast/block_expression'
-require 'puppet/dsl'
 
 # Puppet::Resource::Type represents nodes, classes and defined types.
 #
@@ -16,22 +13,23 @@ require 'puppet/dsl'
 # @api public
 class Puppet::Resource::Type
   Puppet::ResourceType = self
-  include Puppet::Util::InlineDocs
   include Puppet::Util::Warnings
   include Puppet::Util::Errors
 
-  RESOURCE_KINDS = [:hostclass, :node, :definition]
+  RESOURCE_KINDS = [:hostclass, :node, :definition, :application]
 
   # Map the names used in our documentation to the names used internally
   RESOURCE_KINDS_TO_EXTERNAL_NAMES = {
       :hostclass => "class",
       :node => "node",
       :definition => "defined_type",
+      :application => "application"
   }
   RESOURCE_EXTERNAL_NAMES_TO_KINDS = RESOURCE_KINDS_TO_EXTERNAL_NAMES.invert
 
-  attr_accessor :file, :line, :doc, :code, :ruby_code, :parent, :resource_type_collection
+  attr_accessor :file, :line, :doc, :code, :parent, :resource_type_collection
   attr_reader :namespace, :arguments, :behaves_like, :module_name
+  attr_reader :produces, :consumes
 
   # Map from argument (aka parameter) names to Puppet Type
   # @return [Hash<Symbol, Puppet::Pops::Types::PAnyType] map from name to type
@@ -68,11 +66,6 @@ class Puppet::Resource::Type
     new(type, name, data)
   end
 
-  def self.from_pson(data)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(data)
-  end
-
   def to_data_hash
     data = [:doc, :line, :file, :parent].inject({}) do |hash, param|
       next hash unless (value = self.send(param)) and (value != "")
@@ -101,6 +94,30 @@ class Puppet::Resource::Type
     return(klass == parent_type ? true : parent_type.child_of?(klass))
   end
 
+  # Evaluate the resources produced by the given resource. These resources are
+  # evaluated in a separate but identical scope from the rest of the resource.
+  def evaluate_produces(resource)
+    # Only defined types can produce capabilities
+    return unless definition?
+
+    scope = resource.scope.newscope(:namespace => namespace, :source => self, :resource => resource) unless resource.title == :main
+
+    set_resource_parameters(resource, scope)
+
+    # This, somewhat magically, puts the produced resources into the catalog
+    # @todo lutter 2014-11-12: should they wind up in the catalog ? We
+    # could send them to PuppetDB separately, as something more
+    # special. There's no real need to send them to the agent
+    # @todo lutter 2014-11-12: should there be any dependency on +resource+ ?
+    # @todo lutter 2014-11-12: check that each of these resources is
+    # actually a capability
+    produces.map do |prod|
+      produced_resource = prod.safeevaluate(scope).first
+      scope.catalog.add_edge(produced_resource, resource)
+      produced_resource
+    end
+  end
+
   # Now evaluate the code associated with this class or definition.
   def evaluate_code(resource)
 
@@ -113,6 +130,21 @@ class Puppet::Resource::Type
     set_resource_parameters(resource, scope)
 
     resource.add_edge_to_stage
+
+    # Tag producing resources with 'producer:main' to indicate it's at the
+    # toplevel if it hasn't been tagged with 'producer:APP:TITLE' which
+    # happens in Puppet::Parser::Compiler#add_resource
+    # @todo lutter 2015-01-29: clean up how we handle tagging
+    # @todo lutter 2014-11-13: we would really like to use a dedicated
+    # metadata field to indicate the producer of a resource, but that
+    # requires changes to PuppetDB and its API; so for now, we just use
+    # tagging
+    unless produces.empty?
+      resource.tags.find { |t| t.start_with?("producer:") } or
+        resource.tag("producer:main")
+    end
+
+    evaluate_produces(resource)
 
     if code
       if @match # Only bother setting up the ephemeral scope if there are match variables to add into it
@@ -127,8 +159,6 @@ class Puppet::Resource::Type
         code.safeevaluate(scope)
       end
     end
-
-    evaluate_ruby_code(resource, scope) if ruby_code
   end
 
   def initialize(type, name, options = {})
@@ -150,6 +180,11 @@ class Puppet::Resource::Type
     @match = nil
 
     @module_name = options[:module_name]
+    @produces = options[:produces] || []
+    # +options[:consumes]+ is an array of pairs +[name, value]+ (though
+    # value should always be nil, we don't care); turn it into an array of
+    # the names of the consumption params
+    @consumes = (options[:consumes] || []).map { |x| x[0].to_sym }
   end
 
   # This is only used for node names, and really only when the node name
@@ -187,7 +222,6 @@ class Puppet::Resource::Type
     end
 
     self.code = Puppet::Parser::ParserFactory.code_merger.concatenate([self, other])
-#    self.code = self.code.sequence_with(other.code)
   end
 
   # Make an instance of the resource type, and place it in the catalog
@@ -247,41 +281,23 @@ class Puppet::Resource::Type
     end
   end
 
-  # MQR TODO:
-  #
-  # The change(s) introduced by the fix for #4270 are mostly silly & should be
-  # removed, though we didn't realize it at the time.  If it can be established/
-  # ensured that nodes never call parent_type and that resource_types are always
-  # (as they should be) members of exactly one resource_type_collection the
-  # following method could / should be replaced with:
-  #
-  # def parent_type
-  #   @parent_type ||= parent && (
-  #     resource_type_collection.find_or_load([name],parent,type.to_sym) ||
-  #     fail Puppet::ParseError, "Could not find parent resource type '#{parent}' of type #{type} in #{resource_type_collection.environment}"
-  #   )
-  # end
-  #
-  # ...and then the rest of the changes around passing in scope reverted.
-  #
   def parent_type(scope = nil)
     return nil unless parent
 
-    unless @parent_type
-      raise "Must pass scope to parent_type when called first time" unless scope
-      unless @parent_type = scope.environment.known_resource_types.send("find_#{type}", [name], parent)
-        fail Puppet::ParseError, "Could not find parent resource type '#{parent}' of type #{type} in #{scope.environment}"
-      end
-    end
-
-    @parent_type
+    @parent_type ||= scope.environment.known_resource_types.send("find_#{type}", parent) ||
+      fail(Puppet::ParseError, "Could not find parent resource type '#{parent}' of type #{type} in #{scope.environment}")
   end
 
   # Set any arguments passed by the resource as variables in the scope.
   def set_resource_parameters(resource, scope)
     set = {}
+
     resource.to_hash.each do |param, value|
       param = param.to_sym
+      if consumes.include?(param)
+        value = find_capabilities(resource, scope, param, value)
+      end
+
       fail Puppet::ParseError, "#{resource.ref} does not accept attribute #{param}" unless valid_parameter?(param)
 
       exceptwrap { scope[param.to_s] = value }
@@ -317,6 +333,9 @@ class Puppet::Resource::Type
     param = param.to_s
 
     return true if param == "name"
+    # @todo lutter 2015-01-28: any application instance can have a nodes
+    # parameter. It deserves a lot more validation if we keep it
+    return true if param == "nodes" && application?
     return true if Puppet::Type.metaparam?(param)
     return false unless defined?(@arguments)
     return(arguments.include?(param) ? true : false)
@@ -335,13 +354,11 @@ class Puppet::Resource::Type
 
   # Sets the argument name to Puppet Type hash used for type checking.
   # Names must correspond to available arguments (they must be defined first).
-  # Arguments not mentioned will not be type-checked. Only supported when parser == "future"
+  # Arguments not mentioned will not be type-checked.
   #
   def set_argument_types(name_to_type_hash)
     @argument_types = {}
-    # Stop here if not running under future parser, the rest requires pops to be initialized
-    # and that the type system is available
-    return unless Puppet[:parser] == 'future' && name_to_type_hash
+    return unless name_to_type_hash
     name_to_type_hash.each do |name, t|
       # catch internal errors
       unless @arguments.include?(name)
@@ -356,6 +373,95 @@ class Puppet::Resource::Type
 
   private
 
+  # Given the value of a capability parameter, make sure that all the
+  # capabilities mentioned/referenced in it are in the catalog
+  def find_capabilities(resource, scope, param, value)
+    # @todo lutter 2014-11-13: type switching, really ?
+    if value.is_a?(Array)
+      value.each { |x| find_capabilities(resource, scope, param, x) }
+    elsif value.is_a?(Puppet::Resource)
+      find_capability(resource, scope, param, value)
+    else
+      raise Puppet::DevError, "Don't know yet how to lookup up the value for capability #{param}; the value is #{value.inspect} of class #{value.class.name}"
+    end
+  end
+
+  def find_capability(resource, scope, name, cap)
+    # @todo lutter 2014-11-04: we unconditionally prefer the local catalog
+    # to PDB here; that makes it possible that the user violates
+    # per-environment uniqueness of the capability
+    unless cap_resource = scope.catalog.resource(cap.type, cap.title)
+      prod_tag = resource.tags.find { |t| t.start_with?("producer:") } ||
+        "producer:main"
+      cap_resource = lookup_resource_from_puppetdb(name, cap, prod_tag)
+      scope.catalog.add_resource(cap_resource) if cap_resource
+    end
+
+    if cap_resource
+      # @todo lutter 2014-11-13: don't clobber existing requires, add to them
+      resource[:require] = cap_resource
+    else
+      fail Puppet::ParseError, "Could not find capability #{cap} for #{name}"
+    end
+  end
+
+  # Look the capability resource +cap+ from PuppetDB. +name+ is the name of
+  # the parameter in the consuming resource to which the looked up value
+  # will be bound, but is only used for error messages
+  def lookup_resource_from_puppetdb(name, cap, prod_tag)
+    # Consult PuppetDB
+    # @todo lutter 2014-11-04: this should use Puppet::Util::Puppetdb::Http
+    require 'net/http'
+    require 'cgi'
+    http = Net::HTTP.new("localhost", 8080)
+    # @todo lutter 2014-11-13: for applications, this needs to restrict the
+    # lookup by the application in which we are working by looking for the
+    # right 'producer'
+    query = ["and", ["=", "type", cap.type.capitalize],
+                    ["=", "title", cap.title],
+                    ["=", "tag", prod_tag]].to_json
+
+    Puppet.notice "Capability lookup #{cap}: #{query}"
+    response = http.get("/v3/resources?query=#{CGI.escape(query)}",
+                        { "Accept" => 'application/json'})
+
+    json = response.body
+
+    # @todo lutter 2014-11-04: use just JSON
+    data = PSON.parse(json)
+    data.is_a?(Array) or raise Puppet::DevError,
+      "Unexpected response from PuppetDB when looking up #{cap} " +
+      "for param #{name}: expected an Array but got #{data.inspect}"
+
+    # @todo lutter 2014-11-13: this was in the original capabilities
+    # prototype; can we really get entries back that do not have
+    # parameters set ?
+    data = data.select { |hash| hash["parameters"] }
+
+    Puppet.notice "Capability lookup #{cap}: response #{data}"
+    data.size <= 1 or fail Puppet::ParseError,
+      "Multiple resources found in PuppetDB when looking up #{cap} " +
+      "for param #{name}: #{data.inspect}"
+
+    unless data.empty?
+      hash = data.first
+      resource = Puppet::Resource.new(hash["type"], hash["title"])
+      real_type = Puppet::Type.type(resource.type) or
+        fail Puppet::ParseError,
+          "Could not find resource type #{resource.type} returned from PuppetDB"
+      real_type.parameters.each do |param|
+        param = param.to_s
+        next if param == "name"
+        if value = hash["parameters"][param]
+          resource[param] = value
+        else
+          Puppet.debug "No capability value for #{resource}->#{param}"
+        end
+      end
+      return resource
+    end
+  end
+
   def convert_from_ast(name)
     value = name.value
     if value.is_a?(Puppet::Parser::AST::Regex)
@@ -369,10 +475,6 @@ class Puppet::Resource::Type
     return unless klass = parent_type(resource.scope) and parent_resource = resource.scope.compiler.catalog.resource(:class, klass.name) || resource.scope.compiler.catalog.resource(:node, klass.name)
     parent_resource.evaluate unless parent_resource.evaluated?
     parent_scope(resource.scope, klass)
-  end
-
-  def evaluate_ruby_code(resource, scope)
-    Puppet::DSL::ResourceAPI.new(resource, scope, ruby_code).evaluate
   end
 
   # Split an fq name into a namespace and name

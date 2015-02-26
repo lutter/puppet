@@ -87,14 +87,16 @@ class Puppet::Configurer
       download_plugins(remote_environment_for_plugins)
     end
 
+    facts_hash = {}
     if Puppet::Resource::Catalog.indirection.terminus_class == :rest
       # This is a bit complicated.  We need the serialized and escaped facts,
       # and we need to know which format they're encoded in.  Thus, we
       # get a hash with both of these pieces of information.
       #
       # facts_for_uploading may set Puppet[:node_name_value] as a side effect
-      return facts_for_uploading
+      facts_hash = facts_for_uploading
     end
+    facts_hash
   end
 
   def prepare_and_retrieve_catalog(options, query_options)
@@ -114,7 +116,7 @@ class Puppet::Configurer
     report = options[:report]
     report.configuration_version = catalog.version
 
-    benchmark(:notice, "Finished catalog run") do
+    benchmark(:notice, "Applied catalog") do
       catalog.apply(options)
     end
 
@@ -156,7 +158,9 @@ class Puppet::Configurer
       unless options[:catalog]
         begin
           if node = Puppet::Node.indirection.find(Puppet[:node_name_value],
-              :environment => @environment, :ignore_cache => true, :transaction_uuid => @transaction_uuid,
+              :environment => Puppet::Node::Environment.remote(@environment),
+              :ignore_cache => true,
+              :transaction_uuid => @transaction_uuid,
               :fail_on_404 => true)
 
             # If we have deserialized a node from a rest call, we want to set
@@ -172,9 +176,7 @@ class Puppet::Configurer
               query_options = nil
             end
           end
-        rescue SystemExit,NoMemoryError
-          raise
-        rescue Exception => detail
+        rescue StandardError => detail
           Puppet.warning("Unable to fetch my node definition, but the agent run will continue:")
           Puppet.warning(detail)
         end
@@ -193,9 +195,6 @@ class Puppet::Configurer
       Puppet.push_context({:current_environment => local_node_environment}, "Local node environment for configurer transaction")
 
       query_options = get_facts(options) unless query_options
-
-      # get_facts returns nil during puppet apply
-      query_options ||= {}
       query_options[:transaction_uuid] = @transaction_uuid
 
       unless catalog = prepare_and_retrieve_catalog(options, query_options)
@@ -214,6 +213,10 @@ class Puppet::Configurer
         Puppet.warning "Local environment: \"#{@environment}\" doesn't match server specified environment \"#{catalog.environment}\", restarting agent run with environment \"#{catalog.environment}\""
         @environment = catalog.environment
         report.environment = @environment
+
+        query_options = get_facts(options)
+        query_options[:transaction_uuid] = @transaction_uuid
+
         return nil unless catalog = prepare_and_retrieve_catalog(options, query_options)
         tries += 1
       end
@@ -242,7 +245,7 @@ class Puppet::Configurer
   def send_report(report)
     puts report.summary if Puppet[:summarize]
     save_last_run_summary(report)
-    Puppet::Transaction::Report.indirection.save(report, nil, :environment => @environment) if Puppet[:report]
+    Puppet::Transaction::Report.indirection.save(report, nil, :environment => Puppet::Node::Environment.remote(@environment)) if Puppet[:report]
   rescue => detail
     Puppet.log_exception(detail, "Could not send report: #{detail}")
   end
@@ -274,7 +277,7 @@ class Puppet::Configurer
     result = nil
     @duration = thinmark do
       result = Puppet::Resource::Catalog.indirection.find(Puppet[:node_name_value],
-        query_options.merge(:ignore_terminus => true, :environment => @environment))
+        query_options.merge(:ignore_terminus => true, :environment => Puppet::Node::Environment.remote(@environment)))
     end
     Puppet.notice "Using cached catalog"
     result
@@ -287,12 +290,10 @@ class Puppet::Configurer
     result = nil
     @duration = thinmark do
       result = Puppet::Resource::Catalog.indirection.find(Puppet[:node_name_value],
-        query_options.merge(:ignore_cache => true, :environment => @environment, :fail_on_404 => true))
+        query_options.merge(:ignore_cache => true, :environment => Puppet::Node::Environment.remote(@environment), :fail_on_404 => true))
     end
     result
-  rescue SystemExit,NoMemoryError
-    raise
-  rescue Exception => detail
+  rescue StandardError => detail
     Puppet.log_exception(detail, "Could not retrieve catalog from remote server: #{detail}")
     return nil
   end

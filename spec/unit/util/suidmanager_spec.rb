@@ -33,8 +33,8 @@ describe Puppet::Util::SUIDManager do
       Puppet::Util::SUIDManager.egid = user[:gid]
       Puppet::Util::SUIDManager.euid = user[:uid]
 
-      xids[:egid].should == user[:gid]
-      xids[:euid].should == user[:uid]
+      expect(xids[:egid]).to eq(user[:gid])
+      expect(xids[:euid]).to eq(user[:uid])
     end
   end
 
@@ -48,7 +48,7 @@ describe Puppet::Util::SUIDManager do
 
       Puppet::Util::SUIDManager.asuser(user[:uid], user[:gid]) {}
 
-      xids.should be_empty
+      expect(xids).to be_empty
     end
 
     context "when root and not windows" do
@@ -57,11 +57,9 @@ describe Puppet::Util::SUIDManager do
         Puppet.features.stubs(:microsoft_windows?).returns(false)
       end
 
-      it "should set euid/egid when root" do
-        Process.stubs(:uid).returns(0)
-
-        Process.stubs(:egid).returns(51)
-        Process.stubs(:euid).returns(50)
+      it "should set euid/egid" do
+        Process.stubs(:egid).returns(51).then.returns(51).then.returns(user[:gid])
+        Process.stubs(:euid).returns(50).then.returns(50).then.returns(user[:uid])
 
         Puppet::Util::SUIDManager.stubs(:convert_xid).with(:gid, 51).returns(51)
         Puppet::Util::SUIDManager.stubs(:convert_xid).with(:uid, 50).returns(50)
@@ -69,31 +67,31 @@ describe Puppet::Util::SUIDManager do
 
         yielded = false
         Puppet::Util::SUIDManager.asuser(user[:uid], user[:gid]) do
-          xids[:egid].should == user[:gid]
-          xids[:euid].should == user[:uid]
+          expect(xids[:egid]).to eq(user[:gid])
+          expect(xids[:euid]).to eq(user[:uid])
           yielded = true
         end
 
-        xids[:egid].should == 51
-        xids[:euid].should == 50
+        expect(xids[:egid]).to eq(51)
+        expect(xids[:euid]).to eq(50)
 
         # It's possible asuser could simply not yield, so the assertions in the
         # block wouldn't fail. So verify those actually got checked.
-        yielded.should be_true
+        expect(yielded).to be_truthy
       end
 
       it "should just yield if user and group are nil" do
         yielded = false
         Puppet::Util::SUIDManager.asuser(nil, nil) { yielded = true }
-        yielded.should be_true
-        xids.should == {}
+        expect(yielded).to be_truthy
+        expect(xids).to eq({})
       end
 
       it "should just change group if only group is given" do
         yielded = false
         Puppet::Util::SUIDManager.asuser(nil, 42) { yielded = true }
-        yielded.should be_true
-        xids.should == { :egid => 42 }
+        expect(yielded).to be_truthy
+        expect(xids).to eq({ :egid => 42 })
       end
 
       it "should change gid to the primary group of uid by default" do
@@ -101,8 +99,8 @@ describe Puppet::Util::SUIDManager do
 
         yielded = false
         Puppet::Util::SUIDManager.asuser(42) { yielded = true }
-        yielded.should be_true
-        xids.should == { :euid => 42, :egid => 42 }
+        expect(yielded).to be_truthy
+        expect(xids).to eq({ :euid => 42, :egid => 42 })
       end
 
       it "should change both uid and gid if given" do
@@ -119,7 +117,7 @@ describe Puppet::Util::SUIDManager do
 
         yielded = false
         Puppet::Util::SUIDManager.asuser(42, 43) { yielded = true }
-        yielded.should be_true
+        expect(yielded).to be_truthy
       end
     end
 
@@ -128,7 +126,7 @@ describe Puppet::Util::SUIDManager do
 
       Puppet::Util::SUIDManager.asuser(user[:uid], user[:gid]) {}
 
-      xids.should be_empty
+      expect(xids).to be_empty
     end
   end
 
@@ -142,8 +140,20 @@ describe Puppet::Util::SUIDManager do
 
         Puppet::Util::SUIDManager.change_group(42, true)
 
-        xids[:egid].should == 42
-        xids[:gid].should == 42
+        expect(xids[:egid]).to eq(42)
+        expect(xids[:gid]).to eq(42)
+      end
+
+      it "should not change_privilege when gid already matches" do
+        Process::GID.expects(:change_privilege).with do |gid|
+          Process.gid = 42
+          Process.egid = 42
+        end
+
+        Puppet::Util::SUIDManager.change_group(42, true)
+
+        expect(xids[:egid]).to eq(42)
+        expect(xids[:gid]).to eq(42)
       end
     end
 
@@ -151,8 +161,8 @@ describe Puppet::Util::SUIDManager do
       it "should change only egid" do
         Puppet::Util::SUIDManager.change_group(42, false)
 
-        xids[:egid].should == 42
-        xids[:gid].should == 0
+        expect(xids[:egid]).to eq(42)
+        expect(xids[:gid]).to eq(0)
       end
     end
   end
@@ -169,8 +179,21 @@ describe Puppet::Util::SUIDManager do
 
         Puppet::Util::SUIDManager.change_user(42, true)
 
-        xids[:euid].should == 42
-        xids[:uid].should == 42
+        expect(xids[:euid]).to eq(42)
+        expect(xids[:uid]).to eq(42)
+      end
+      it "should not change_privilege when uid already matches" do
+        Process::UID.expects(:change_privilege).with do |uid|
+          Process.uid = 42
+          Process.euid = 42
+        end
+
+        Puppet::Util::SUIDManager.expects(:initgroups).with(42)
+
+        Puppet::Util::SUIDManager.change_user(42, true)
+
+        expect(xids[:euid]).to eq(42)
+        expect(xids[:uid]).to eq(42)
       end
     end
 
@@ -179,8 +202,8 @@ describe Puppet::Util::SUIDManager do
         Puppet::Util::SUIDManager.stubs(:initgroups).returns([])
         Puppet::Util::SUIDManager.change_user(42, false)
 
-        xids[:euid].should == 42
-        xids[:uid].should == 0
+        expect(xids[:euid]).to eq(42)
+        expect(xids[:uid]).to eq(0)
       end
 
       it "should set euid before groups if changing to root" do
@@ -207,40 +230,6 @@ describe Puppet::Util::SUIDManager do
     end
   end
 
-  describe "when running commands" do
-    before :each do
-      # We want to make sure $CHILD_STATUS is set
-      Kernel.system '' if $CHILD_STATUS.nil?
-    end
-
-    describe "with #run_and_capture" do
-      it "should capture the output and return process status" do
-        Puppet::Util::Execution.
-          expects(:execute).with() do |*args|
-              args[0] == 'yay' &&
-              args[1][:combine] == true &&
-              args[1][:failonfail] == false &&
-              args[1][:uid] == user[:uid] &&
-              args[1][:gid] == user[:gid] &&
-              args[1][:override_locale] == true &&
-              args[1].has_key?(:custom_environment)
-        end .
-          returns('output')
-        output = Puppet::Util::SUIDManager.run_and_capture 'yay', user[:uid], user[:gid]
-
-        output.first.should == 'output'
-        output.last.should be_a(Process::Status)
-      end
-
-      it "should log a deprecation notice" do
-        Puppet::Util::Execution.stubs(:execute).returns("success")
-        Puppet.expects(:deprecation_warning).with('Puppet::Util::SUIDManager.run_and_capture is deprecated; please use Puppet::Util::Execution.execute instead.')
-
-        output = Puppet::Util::SUIDManager.run_and_capture 'yay', user[:uid], user[:gid]
-      end
-    end
-  end
-
   describe "#root?" do
     describe "on POSIX systems" do
       before :each do
@@ -251,13 +240,13 @@ describe Puppet::Util::SUIDManager do
       it "should be root if uid is 0" do
         Process.stubs(:uid).returns(0)
 
-        Puppet::Util::SUIDManager.should be_root
+        expect(Puppet::Util::SUIDManager).to be_root
       end
 
       it "should not be root if uid is not 0" do
         Process.stubs(:uid).returns(1)
 
-        Puppet::Util::SUIDManager.should_not be_root
+        expect(Puppet::Util::SUIDManager).not_to be_root
       end
     end
 
@@ -265,13 +254,13 @@ describe Puppet::Util::SUIDManager do
       it "should be root if user is privileged" do
         Puppet::Util::Windows::User.stubs(:admin?).returns true
 
-        Puppet::Util::SUIDManager.should be_root
+        expect(Puppet::Util::SUIDManager).to be_root
       end
 
       it "should not be root if user is not privileged" do
         Puppet::Util::Windows::User.stubs(:admin?).returns false
 
-        Puppet::Util::SUIDManager.should_not be_root
+        expect(Puppet::Util::SUIDManager).not_to be_root
       end
     end
   end

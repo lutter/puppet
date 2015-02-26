@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 
-# For security reasons, ensure that '.' is not on the load path
-# This is primarily for 1.8.7 since 1.9.2+ doesn't put '.' on the load path
-$LOAD_PATH.delete '.'
-
-require 'puppet/util/command_line'
-Puppet::Util::CommandLine.new.execute
+begin
+  require 'puppet/util/command_line'
+  Puppet::Util::CommandLine.new.execute
+rescue LoadError => e
+  $stderr.puts e.message
+  exit(1)
+end

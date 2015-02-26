@@ -19,7 +19,7 @@ module HarnessOptions
     :color => false,
     :root_keys => true,
     :ssh => {
-      :keys => ["id_rsa-acceptance"],
+      :keys => ["id_rsa_acceptance", "#{ENV['HOME']}/.ssh/id_rsa-acceptance"],
     },
     :xml => true,
     :timesync => false,
@@ -79,12 +79,15 @@ def beaker_test(mode = :packages, options = {})
   if mode == :git
     # Build up project git urls based on git server and fork env variables or defaults
     final_options[:install].map! do |install|
+      raise(ArgumentError, "Missing Git URL within options hash. Install URL is nil.") if install.nil?
       if md = /^(\w+)#(\w+)$/.match(install)
         project, project_sha = md.captures
         "#{build_giturl(project)}##{project_sha}"
       elsif md = /^(\w+)$/.match(install)
         project = md[1]
         "#{build_giturl(project)}##{sha}"
+      else
+        install
       end
     end
   end
@@ -149,7 +152,9 @@ def generate_config_for_latest_hosts
       host_regex = /^([\w.]+) \(#{node_info[:node_label]}\)/
       if matched = host_regex.match(pre_suite_log)
         hostname = matched[1]
-        fqdn = "#{hostname}.delivery.puppetlabs.net"
+        fqdn = (hostname =~ /\./) ?
+          hostname :
+          "#{hostname}.delivery.puppetlabs.net"
       elsif /^#{node_info[:node_label]} /.match(pre_suite_log)
         fqdn = "#{node_info[:node_label]}"
         puts "* Couldn't find any log lines for #{host_regex}, assuming #{fqdn} is the fqdn"
@@ -200,7 +205,7 @@ def list_preserved_hosts(secs_ago = ONE_DAY_IN_SECS)
     File.open(log, 'r') do |file|
       if file.ctime > yesterday
         file.each_line do |line|
-          matchdata = /^(\w+) \(.*?\) \d\d:\d\d:\d\d\$/.match(line.encode!('UTF-8', 'UTF-8', :invalid => :replace))
+          matchdata = /^(\w+)(?:\.[\w.]+)? \(.*?\) \d\d:\d\d:\d\d\$/.match(line.encode!('UTF-8', 'UTF-8', :invalid => :replace))
           hosts.add(matchdata[1]) if matchdata
         end
       end
@@ -213,15 +218,11 @@ def release_hosts(hosts = nil, secs_ago = ONE_DAY_IN_SECS)
   secs_ago ||= ONE_DAY_IN_SECS
   hosts ||= list_preserved_hosts(secs_ago)
 
-  require 'beaker'
-  vcloud_pooled = Beaker::VcloudPooled.new(hosts.map { |h| { 'vmhostname' => h } },
-                              :logger => Beaker::Logger.new,
-                              :dot_fog => "#{ENV['HOME']}/.fog",
-                              'pooling_api' => 'http://vcloud.delivery.puppetlabs.net' ,
-                              'datastore' => 'not-used',
-                              'resourcepool' => 'not-used',
-                              'folder' => 'not-used')
-  vcloud_pooled.cleanup
+  hosts.each do |h|
+    hostname = h.split('.').first
+    puts "Releaseing '#{hostname}'"
+    puts `curl -X DELETE --url http://vcloud.delivery.puppetlabs.net/vm/#{hostname}`
+  end
 end
 
 def print_preserved(preserved)
@@ -269,6 +270,14 @@ Run the acceptance tests through Beaker and install packages on the configuratio
 EOS
     task :packages => 'ci:check_env' do
       beaker_test
+    end
+
+    desc <<-EOS
+Run the acceptance tests through Beaker and install packages as part of the AIO puppet-agent installation.
+#{USAGE}
+EOS
+    task :aio => 'ci:check_env' do
+      beaker_test(:aio)
     end
 
     desc <<-EOS

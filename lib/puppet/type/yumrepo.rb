@@ -360,4 +360,30 @@ Puppet::Type.newtype(:yumrepo) do
 
     newvalues(YUM_BOOLEAN, :absent)
   end
+
+  newproperty(:assumeyes) do
+    desc "Determines if yum prompts for confirmation of critical actions.
+      #{YUM_BOOLEAN_DOC}
+      #{ABSENT_DOC}"
+
+    newvalues(YUM_BOOLEAN, :absent)
+  end
+
+  newproperty(:deltarpm_percentage) do
+    desc "Percentage value that determines when to use deltas for this repo.
+      When the delta is larger than this percentage value of the package, the
+      delta is not used.
+      #{ABSENT_DOC}"
+
+    newvalues(/^\d+$/, :absent)
+  end
+
+  newproperty(:deltarpm_metadata_percentage) do
+    desc "Percentage value that determines when to download deltarpm metadata.
+      When the deltarpm metadata is larger than this percentage value of the
+      package, deltarpm metadata is not downloaded.
+      #{ABSENT_DOC}"
+
+    newvalues(/^\d+$/, :absent)
+  end
 end

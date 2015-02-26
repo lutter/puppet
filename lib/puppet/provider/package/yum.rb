@@ -1,5 +1,3 @@
-require 'puppet/util/package'
-
 Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
   desc "Support via `yum`.
 
@@ -13,9 +11,7 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
 
   has_feature :install_options, :versionable, :virtual_packages
 
-  commands :yum => "yum", :rpm => "rpm", :python => "python"
-
-  self::YUMHELPER = File::join(File::dirname(__FILE__), "yumhelper.py")
+  commands :yum => "yum", :rpm => "rpm"
 
   if command('rpm')
     confine :true => begin
@@ -45,14 +41,15 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
   # @param package [String] The name of the package to query
   # @param enablerepo [Array<String>] A list of repositories to enable for this query
   # @param disablerepo [Array<String>] A list of repositories to disable for this query
+  # @param disableexcludes [Array<String>] A list of repository excludes to disable for this query
   # @return [Hash<Symbol, String>]
-  def self.latest_package_version(package, enablerepo, disablerepo)
+  def self.latest_package_version(package, enablerepo, disablerepo, disableexcludes)
 
-    key = [enablerepo, disablerepo]
+    key = [enablerepo, disablerepo, disableexcludes]
 
     @latest_versions ||= {}
     if @latest_versions[key].nil?
-      @latest_versions[key] = fetch_latest_versions(enablerepo, disablerepo)
+      @latest_versions[key] = check_updates(enablerepo, disablerepo, disableexcludes)
     end
 
     if @latest_versions[key][package]
@@ -66,27 +63,62 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
   # @api private
   # @param enablerepo [Array<String>] A list of repositories to enable for this query
   # @param disablerepo [Array<String>] A list of repositories to disable for this query
+  # @param disableexcludes [Array<String>] A list of repository excludes to disable for this query
   # @return [Hash<String, Array<Hash<String, String>>>] All packages that were
   #   found with a list of found versions for each package.
-  def self.fetch_latest_versions(enablerepo, disablerepo)
-    latest_versions = Hash.new {|h, k| h[k] = []}
+  def self.check_updates(enablerepo, disablerepo, disableexcludes)
+    args = [command(:yum), 'check-update']
+    args.concat(enablerepo.map { |repo| ["--enablerepo=#{repo}"] }.flatten)
+    args.concat(disablerepo.map { |repo| ["--disablerepo=#{repo}"] }.flatten)
+    args.concat(disableexcludes.map { |repo| ["--disableexcludes=#{repo}"] }.flatten)
 
-    args = [self::YUMHELPER]
-    args.concat(enablerepo.map { |repo| ['-e', repo] }.flatten)
-    args.concat(disablerepo.map { |repo| ['-d', repo] }.flatten)
+    output = Puppet::Util::Execution.execute(args, :failonfail => false, :combine => false)
 
-    python(args).scan(/^_pkg (.*)$/) do |match|
-      hash = nevra_to_hash(match[0])
+    updates = {}
+    if output.exitstatus == 100
+      updates = parse_updates(output)
+    elsif output.exitstatus == 0
+      self.debug "yum check-update exited with 0; no package updates available."
+    else
+      self.warn "Could not check for updates, 'yum check-update' exited with #{output.exitstatus}"
+    end
+    updates
+  end
 
+  def self.parse_updates(str)
+    # Strip off all content before the first blank line
+    body = str.partition(/^\s*\n/m).last
+
+    updates = Hash.new { |h, k| h[k] = [] }
+    body.split.each_slice(3) do |tuple|
+      hash = update_to_hash(*tuple[0..1])
       # Create entries for both the package name without a version and a
       # version since yum considers those as mostly interchangeable.
       short_name = hash[:name]
       long_name  = "#{hash[:name]}.#{hash[:arch]}"
 
-      latest_versions[short_name] << hash
-      latest_versions[long_name]  << hash
+      updates[short_name] << hash
+      updates[long_name] << hash
     end
-    latest_versions
+
+    updates
+  end
+
+  def self.update_to_hash(pkgname, pkgversion)
+    name, arch = pkgname.split('.')
+
+    match = pkgversion.match(/^(?:(\d+):)?(\S+)-(\S+)$/)
+    epoch = match[1] || '0'
+    version = match[2]
+    release = match[3]
+
+    {
+      :name => name,
+      :epoch => epoch,
+      :version => version,
+      :release => release,
+      :arch    => arch,
+    }
   end
 
   def self.clear
@@ -112,7 +144,7 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
       # Add the package version
       wanted += "-#{should}"
       is = self.query
-      if is && Puppet::Util::Package.versioncmp(should, is[:ensure]) < 0
+      if is && yum_compareEVR(yum_parse_evr(should), yum_parse_evr(is[:ensure])) < 0
         self.debug "Downgrading package #{@resource[:name]} from version #{is[:ensure]} to #{should}"
         operation = :downgrade
       end
@@ -129,13 +161,14 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
 
       # FIXME: Should we raise an exception even if should == :latest
       # and yum updated us to a version other than @param_hash[:ensure] ?
-      raise Puppet::Error, "Failed to update to version #{should}, got version #{is[:ensure]} instead" if should != is[:ensure]
+      vercmp_result = yum_compareEVR(yum_parse_evr(should), yum_parse_evr(is[:ensure]))
+      raise Puppet::Error, "Failed to update to version #{should}, got version #{is[:ensure]} instead" if vercmp_result != 0
     end
   end
 
   # What's the latest package version available?
   def latest
-    upd = self.class.latest_package_version(@resource[:name], enablerepo, disablerepo)
+    upd = self.class.latest_package_version(@resource[:name], enablerepo, disablerepo, disableexcludes)
     unless upd.nil?
       # FIXME: there could be more than one update for a package
       # because of multiarch
@@ -157,16 +190,70 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
     yum "-y", :erase, @resource[:name]
   end
 
-  # @deprecated
-  def latest_info
-    Puppet.deprecation_warning("#{self.class}##{__method__} is deprecated and is no longer used.")
-    @latest_info
+  # parse a yum "version" specification
+  # this re-implements yum's
+  # rpmUtils.miscutils.stringToVersion() in ruby
+  def yum_parse_evr(s)
+    ei = s.index(':')
+    if ei
+      e = s[0,ei]
+      s = s[ei+1,s.length]
+    else
+      e = nil
+    end
+    e = String(Bignum(e)) rescue '0'
+    ri = s.index('-')
+    if ri
+      v = s[0,ri]
+      r = s[ri+1,s.length]
+    else
+      v = s
+      r = nil
+    end
+    return { :epoch => e, :version => v, :release => r }
   end
 
-  # @deprecated
-  def latest_info=(latest)
-    Puppet.deprecation_warning("#{self.class}##{__method__} is deprecated and is no longer used.")
-    @latest_info = latest
+  # how yum compares two package versions:
+  # rpmUtils.miscutils.compareEVR(), which massages data types and then calls
+  # rpm.labelCompare(), found in rpm.git/python/header-py.c, which
+  # sets epoch to 0 if null, then compares epoch, then ver, then rel
+  # using compare_values() and returns the first non-0 result, else 0.
+  # This function combines the logic of compareEVR() and labelCompare().
+  #
+  # "version_should" can be v, v-r, or e:v-r.
+  # "version_is" will always be at least v-r, can be e:v-r
+  def yum_compareEVR(should_hash, is_hash)
+    # pass on to rpm labelCompare
+    rc = compare_values(should_hash[:epoch], is_hash[:epoch])
+    return rc unless rc == 0
+    rc = compare_values(should_hash[:version], is_hash[:version])
+    return rc unless rc == 0
+
+    # here is our special case, PUP-1244.
+    # if should_hash[:release] is nil (not specified by the user),
+    # and comparisons up to here are equal, return equal. We need to
+    # evaluate to whatever level of detail the user specified, so we
+    # don't end up upgrading or *downgrading* when not intended.
+    #
+    # This should NOT be triggered if we're trying to ensure latest.
+    return 0 if should_hash[:release].nil?
+
+    rc = compare_values(should_hash[:release], is_hash[:release])
+    return rc
+  end
+
+  # this method is a native implementation of the
+  # compare_values function in rpm's python bindings,
+  # found in python/header-py.c, as used by yum.
+  def compare_values(s1, s2)
+    if s1.nil? && s2.nil?
+      return 0
+    elsif ( not s1.nil? ) && s2.nil?
+      return 1
+    elsif s1.nil? && (not s2.nil?)
+      return -1
+    end
+    return rpmvercmp(s1, s2)
   end
 
   private
@@ -177,6 +264,10 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
 
   def disablerepo
     scan_options(resource[:install_options], '--disablerepo')
+  end
+
+  def disableexcludes
+    scan_options(resource[:install_options], '--disableexcludes')
   end
 
   # Scan a structure that looks like the package type 'install_options'

@@ -1,5 +1,9 @@
 require 'puppet/version'
 
+if RUBY_VERSION < "1.9.3"
+  raise LoadError, "Puppet #{Puppet.version} requires ruby 1.9.3 or greater."
+end
+
 # see the bottom of the file for further inclusions
 # Also see the new Vendor support - towards the end
 #
@@ -34,7 +38,6 @@ module Puppet
   class << self
     include Puppet::Util
     attr_reader :features
-    attr_writer :name
   end
 
   # the hash that determines how our system behaves
@@ -61,12 +64,11 @@ module Puppet
     end
   end
 
-  # The services running in this process.
-  @services ||= []
-
   require 'puppet/util/logging'
-
   extend Puppet::Util::Logging
+
+  # Setup facter's logging
+  Puppet::Util::Logging.setup_facter_logging!
 
   # The feature collection
   @features = Puppet::Util::Feature.new('puppet/feature')
@@ -113,20 +115,6 @@ module Puppet
   # Load all of the settings.
   require 'puppet/defaults'
 
-  def self.genmanifest
-    if Puppet[:genmanifest]
-      puts Puppet.settings.to_manifest
-      exit(0)
-    end
-  end
-
-  # Parse the config file for this process.
-  # @deprecated Use {initialize_settings}
-  def self.parse_config()
-    Puppet.deprecation_warning("Puppet.parse_config is deprecated; please use Faces API (which will handle settings and state management for you), or (less desirable) call Puppet.initialize_settings")
-    Puppet.initialize_settings
-  end
-
   # Initialize puppet's settings. This is intended only for use by external tools that are not
   #  built off of the Faces API or the Puppet::Util::Application class. It may also be used
   #  to initialize state so that a Face may be used programatically, rather than as a stand-alone
@@ -139,14 +127,6 @@ module Puppet
     do_initialize_settings_for_run_mode(:user, args)
   end
 
-  # Initialize puppet's settings for a specified run_mode.
-  #
-  # @deprecated Use {initialize_settings}
-  def self.initialize_settings_for_run_mode(run_mode)
-    Puppet.deprecation_warning("initialize_settings_for_run_mode may be removed in a future release, as may run_mode itself")
-    do_initialize_settings_for_run_mode(run_mode, [])
-  end
-
   # private helper method to provide the implementation details of initializing for a run mode,
   #  but allowing us to control where the deprecation warning is issued
   def self.do_initialize_settings_for_run_mode(run_mode, args)
@@ -155,7 +135,6 @@ module Puppet
     Puppet.settings.initialize_app_defaults(Puppet::Settings.app_defaults_for_run_mode(run_mode))
     Puppet.push_context(Puppet.base_context(Puppet.settings), "Initial context after settings initialization")
     Puppet::Parser::Functions.reset
-    Puppet::Util::Log.level = Puppet[:log_level]
   end
   private_class_method :do_initialize_settings_for_run_mode
 
@@ -163,6 +142,7 @@ module Puppet
   # code was deprecated in 2008, but this is still in heavy use.  I suppose
   # this can count as a soft deprecation for the next dev. --daniel 2011-04-12
   def self.newtype(name, options = {}, &block)
+    Puppet.deprecation_warning("Puppet.newtype is deprecated and will be removed in a future release. Use Puppet::Type.newtype instead.")
     Puppet::Type.newtype(name, options, &block)
   end
 
@@ -171,33 +151,32 @@ module Puppet
   require "puppet/vendor"
   Puppet::Vendor.load_vendored
 
-  # Set default for YAML.load to unsafe so we don't affect programs
-  # requiring puppet -- in puppet we will call safe explicitly
-  SafeYAML::OPTIONS[:default_mode] = :unsafe
-
   # The bindings used for initialization of puppet
+  #
+  # @param settings [Puppet::Settings,Hash<Symbol,String>] either a Puppet::Settings instance
+  #   or a Hash of settings key/value pairs.
   # @api private
   def self.base_context(settings)
-    environments = settings[:environmentpath]
-    modulepath = Puppet::Node::Environment.split_path(settings[:basemodulepath])
+    environmentpath = settings[:environmentpath]
+    basemodulepath = Puppet::Node::Environment.split_path(settings[:basemodulepath])
 
-    if environments.empty?
-      loaders = [Puppet::Environments::Legacy.new]
+    if environmentpath.nil? || environmentpath.empty?
+      raise(Puppet::Error, "The environmentpath setting cannot be empty or nil.")
     else
-      loaders = Puppet::Environments::Directories.from_path(environments, modulepath)
+      loaders = Puppet::Environments::Directories.from_path(environmentpath, basemodulepath)
       # in case the configured environment (used for the default sometimes)
       # doesn't exist
       default_environment = Puppet[:environment].to_sym
       if default_environment == :production
         loaders << Puppet::Environments::StaticPrivate.new(
-          Puppet::Node::Environment.create(Puppet[:environment].to_sym,
-                                           [],
+          Puppet::Node::Environment.create(default_environment,
+                                           basemodulepath,
                                            Puppet::Node::Environment::NO_MANIFEST))
       end
     end
 
     {
-      :environments => Puppet::Environments::Cached.new(*loaders),
+      :environments => Puppet::Environments::Cached.new(Puppet::Environments::Combined.new(*loaders)),
       :http_pool => proc {
         require 'puppet/network/http'
         Puppet::Network::HTTP::NoCachePool.new
@@ -275,3 +254,4 @@ require 'puppet/data_binding'
 require 'puppet/util/storage'
 require 'puppet/status'
 require 'puppet/file_bucket/file'
+require 'puppet/plugins'

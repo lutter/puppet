@@ -85,12 +85,6 @@ module Puppet::Util::Windows::ADSI
       wmi_connection.execquery(query)
     end
 
-    def sid_for_account(name)
-      Puppet.deprecation_warning "Puppet::Util::Windows::ADSI.sid_for_account is deprecated and will be removed in 3.0, use Puppet::Util::Windows::SID.name_to_sid instead."
-
-      Puppet::Util::Windows::SID.name_to_sid(name)
-    end
-
     ffi_convention :stdcall
 
     # http://msdn.microsoft.com/en-us/library/windows/desktop/ms724295(v=vs.85).aspx
@@ -335,7 +329,7 @@ module Puppet::Util::Windows::ADSI
     end
 
     def self.name_sid_hash(names)
-      return [] if names.nil? or names.empty?
+      return {} if names.nil? or names.empty?
 
       sids = names.map do |name|
         sid = Puppet::Util::Windows::SID.name_to_sid_object(name)
@@ -345,20 +339,6 @@ module Puppet::Util::Windows::ADSI
 
       Hash[ sids ]
     end
-
-    def add_members(*names)
-      Puppet.deprecation_warning('Puppet::Util::Windows::ADSI::Group#add_members is deprecated; please use Puppet::Util::Windows::ADSI::Group#add_member_sids')
-      sids = self.class.name_sid_hash(names)
-      add_member_sids(*sids.values)
-    end
-    alias add_member add_members
-
-    def remove_members(*names)
-      Puppet.deprecation_warning('Puppet::Util::Windows::ADSI::Group#remove_members is deprecated; please use Puppet::Util::Windows::ADSI::Group#remove_member_sids')
-      sids = self.class.name_sid_hash(names)
-      remove_member_sids(*sids.values)
-    end
-    alias remove_member remove_members
 
     def add_member_sids(*sids)
       sids.each do |sid|
@@ -387,7 +367,7 @@ module Puppet::Util::Windows::ADSI
       sids
     end
 
-    def set_members(desired_members)
+    def set_members(desired_members, inclusive = true)
       return if desired_members.nil? or desired_members.empty?
 
       current_hash = Hash[ self.member_sids.map { |sid| [sid.to_s, sid] } ]
@@ -399,7 +379,8 @@ module Puppet::Util::Windows::ADSI
 
       # Then we remove all extra members
       members_to_remove = (current_hash.keys - desired_hash.keys).map { |sid| current_hash[sid] }
-      remove_member_sids(*members_to_remove)
+
+      remove_member_sids(*members_to_remove) if inclusive
     end
 
     def self.create(name)

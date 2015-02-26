@@ -37,8 +37,8 @@ class Puppet::Pops::Parser::EvaluatingParser
     evaluate(scope, parse_string(s, file_source))
   end
 
-  def evaluate_file(file)
-    evaluate(parse_file(file))
+  def evaluate_file(scope, file)
+    evaluate(scope, parse_file(file))
   end
 
   def clear()
@@ -55,9 +55,20 @@ class Puppet::Pops::Parser::EvaluatingParser
     evaluator.evaluate(model, scope)
   end
 
+  # Evaluates the given expression in a local scope with the given variable bindings
+  # set in this local scope, returns what the expression returns.
+  #
+  def evaluate_expression_with_bindings(scope, variable_bindings, expression)
+    evaluator.evaluate_block_with_bindings(scope, variable_bindings, expression)
+  end
+
   def evaluator
     @@evaluator ||= Puppet::Pops::Evaluator::EvaluatorImpl.new()
     @@evaluator
+  end
+
+  def convert_to_3x(object, scope)
+    val = @@evaluator.convert(object, scope, nil)
   end
 
   def validate(parse_result)
@@ -76,7 +87,7 @@ class Puppet::Pops::Parser::EvaluatingParser
 
   def assert_and_report(parse_result)
     return nil unless parse_result
-    if parse_result.source_ref.nil? or parse_result.source_ref == ''
+    if parse_result.source_ref.nil? || parse_result.source_ref == ''
       parse_result.source_ref = @file_source
     end
     validation_result = validate(parse_result)

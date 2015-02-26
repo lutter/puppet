@@ -21,8 +21,8 @@ Puppet::Indirector::Face.define(:catalog, '0.0.1') do
     `certname`; use the `--terminus` option to change the source of the catalog.
   EOT
 
-  get_action(:destroy).summary "Invalid for this subcommand."
-  get_action(:search).summary "Invalid for this subcommand."
+  deactivate_action(:destroy)
+  deactivate_action(:search)
   find = get_action(:find)
   find.summary "Retrieve the catalog for a node."
   find.arguments "<certname>"
@@ -50,7 +50,7 @@ Puppet::Indirector::Face.define(:catalog, '0.0.1') do
 
       $ puppet catalog apply --terminus rest
 
-      From `secret_agent.rb` (API example):
+      API example:
 
           # ...
           Puppet::Face[:catalog, '0.0.1'].download
@@ -104,7 +104,7 @@ Puppet::Indirector::Face.define(:catalog, '0.0.1') do
 
       $ puppet catalog download
 
-      From `secret_agent.rb` (API example):
+      API example:
 
           Puppet::Face[:plugin, '0.0.1'].download
           Puppet::Face[:facts, '0.0.1'].upload

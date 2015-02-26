@@ -14,7 +14,6 @@ module Puppet
   ############################################################################################
 
   AS_DURATION = %q{This setting can be a time interval in seconds (30 or 30s), minutes (30m), hours (6h), days (2d), or years (5y).}
-  STORECONFIGS_ONLY = %q{This setting is only used by the ActiveRecord storeconfigs and inventory backends, which are deprecated.}
 
   # This is defined first so that the facter implementation is replaced before other setting defaults are evaluated.
   define_settings(:main,
@@ -27,6 +26,9 @@ module Puppet
           raise ArgumentError, 'facter has already evaluated facts.' if Facter.instance_variable_get(:@collection)
           raise ArgumentError, 'cfacter version 0.2.0 or later is not installed.' unless Puppet.features.cfacter?
           CFacter.initialize
+
+          # Setup Facter's logging again now that native facter is initialized
+          Puppet::Util::Logging.setup_facter_logging!
         end
     }
   )
@@ -83,6 +85,8 @@ module Puppet
         * emerg
         * crit
         ",
+      :hook => proc {|value| Puppet::Util::Log.level = value },
+      :call_hook => :on_initialize_and_write,
     },
     :disable_warnings => {
       :default => [],
@@ -122,6 +126,10 @@ module Puppet
         :default  => false,
         :type     => :boolean,
         :desc     => "Whether to print stack traces on some errors",
+        :hook     => proc do |value|
+          # Enable or disable Facter's trace option too
+          Facter.trace(value) if Facter.respond_to? :trace
+        end
     },
     :profile => {
         :default  => false,
@@ -208,7 +216,10 @@ module Puppet
     :path => {
         :default          => "none",
         :desc             => "The shell search path.  Defaults to whatever is inherited
-          from the parent process.",
+          from the parent process.
+
+          This setting can only be set in the `[main]` section of puppet.conf; it cannot
+          be set in `[master]`, `[agent]`, or an environment config section.",
         :call_hook => :on_define_and_write,
         :hook             => proc do |value|
           ENV["PATH"] = "" if ENV["PATH"].nil?
@@ -230,17 +241,10 @@ module Puppet
           is in Ruby's search path\n",
       :call_hook => :on_initialize_and_write,
       :hook             => proc do |value|
-        $LOAD_PATH.delete(@oldlibdir) if defined?(@oldlibdir) and $LOAD_PATH.include?(@oldlibdir)
+        $LOAD_PATH.delete(@oldlibdir) if defined?(@oldlibdir) && $LOAD_PATH.include?(@oldlibdir)
         @oldlibdir = value
         $LOAD_PATH << value
       end
-    },
-    :ignoreimport => {
-        :default  => false,
-        :type     => :boolean,
-        :desc     => "If true, allows the parser to continue without requiring
-          all files referenced with `import` statements to exist. This setting was primarily
-          designed for use with commit hooks for parse-checking.",
     },
     :environment => {
         :default  => "production",
@@ -250,7 +254,7 @@ module Puppet
           this provides the default environment for nodes we know nothing about."
     },
     :environmentpath => {
-      :default => "",
+      :default => "$confdir/environments",
       :desc    => "A search path for directory environments, as a list of directories
         separated by the system path separator character. (The POSIX path separator
         is ':', and the Windows path separator is ';'.)
@@ -347,13 +351,6 @@ module Puppet
       :desc    => "The hiera configuration file. Puppet only reads this file on startup, so you must restart the puppet master every time you edit it.",
       :type    => :file,
     },
-    :binder => {
-      :default => false,
-      :desc    => "Turns the binding system on or off. This includes bindings in modules.
-        The binding system aggregates data from modules and other locations and makes them available for lookup.
-        The binding system is experimental and any or all of it may change.",
-      :type    => :boolean,
-    },
     :binder_config => {
       :default => nil,
       :desc    => "The binder configuration file. Puppet reads this file on each request to configure the bindings system.
@@ -375,20 +372,6 @@ module Puppet
     :facts_terminus => {
       :default => 'facter',
       :desc => "The node facts terminus.",
-      :call_hook => :on_initialize_and_write,
-      :hook => proc do |value|
-        require 'puppet/node/facts'
-        # Cache to YAML if we're uploading facts away
-        if %w[rest inventory_service].include? value.to_s
-          Puppet.info "configuring the YAML fact cache because a remote terminus is active"
-          Puppet::Node::Facts.indirection.cache_class = :yaml
-        end
-      end
-    },
-    :inventory_terminus => {
-      :type       => :terminus,
-      :default    => "$facts_terminus",
-      :desc       => "Should usually be the same as the facts terminus",
     },
     :default_file_terminus => {
       :type       => :terminus,
@@ -397,13 +380,6 @@ module Puppet
       uri, e.g. puppet:///file. The default of `rest` causes the file to be
       retrieved using the `server` setting. When running `apply` the default
       is `file_server`, causing requests to be filled locally."
-    },
-    :httplog => {
-        :default  => "$logdir/http.log",
-        :type     => :file,
-        :owner    => "root",
-        :mode     => "0640",
-        :desc     => "Where the puppet agent web server logs.",
     },
     :http_proxy_host => {
       :default    => "none",
@@ -444,6 +420,19 @@ module Puppet
       :type       => :boolean,
       :desc       => "Whether to write HTTP request and responses to stderr. This should never be used in a production environment."
     },
+    :http_connect_timeout => {
+      :default => "2m",
+      :type    => :duration,
+      :desc    => "The maximum amount of time to wait when establishing an HTTP connection. The default
+      value is 2 minutes.
+      #{AS_DURATION}",
+    },
+    :http_read_timeout => {
+      :type    => :duration,
+      :desc    => "The time to wait for one block to be read from an HTTP connection. If nothing is
+      read after the elapsed interval then the connection will be closed. The default value is unlimited.
+      #{AS_DURATION}",
+    },
     :filetimeout => {
       :default    => "15s",
       :type       => :duration,
@@ -452,72 +441,20 @@ module Puppet
       a file (such as manifests or templates) has changed on disk. #{AS_DURATION}",
     },
     :environment_timeout => {
-      :default    => "3m",
+      :default    => "unlimited",
       :type       => :ttl,
       :desc       => "The time to live for a cached environment.
       #{AS_DURATION}
       This setting can also be set to `unlimited`, which causes the environment to
       be cached until the master is restarted."
     },
-    :queue_type => {
-      :default    => "stomp",
-      :desc       => "Which type of queue to use for asynchronous processing.",
-    },
-    :queue_type => {
-      :default    => "stomp",
-      :desc       => "Which type of queue to use for asynchronous processing.",
-    },
-    :queue_source => {
-      :default    => "stomp://localhost:61613/",
-      :desc       => "Which type of queue to use for asynchronous processing.  If your stomp server requires
-      authentication, you can include it in the URI as long as your stomp client library is at least 1.1.1",
-    },
-    :async_storeconfigs => {
-        :default  => false,
-        :type     => :boolean,
-        :desc     => "Whether to use a queueing system to provide asynchronous database integration.
-      Requires that `puppet queue` be running.",
-        :hook     => proc do |value|
-          if value
-            # This reconfigures the termini for Node, Facts, and Catalog
-            Puppet.settings.override_default(:storeconfigs, true)
-
-            # But then we modify the configuration
-            Puppet::Resource::Catalog.indirection.cache_class = :queue
-            Puppet.settings.override_default(:catalog_cache_terminus, :queue)
-          else
-            raise "Cannot disable asynchronous storeconfigs in a running process"
-          end
-        end
-    },
-    :thin_storeconfigs => {
-      :default  => false,
-      :type     => :boolean,
-      :desc     =>
-    "Boolean; whether Puppet should store only facts and exported resources in the storeconfigs
-    database. This will improve the performance of exported resources with the older
-    `active_record` backend, but will disable external tools that search the storeconfigs database.
-    Thinning catalogs is generally unnecessary when using PuppetDB to store catalogs.",
-      :hook     => proc do |value|
-        Puppet.settings.override_default(:storeconfigs, true) if value
-        end
-      },
-    :config_version => {
-      :default    => "",
-      :desc       => "How to determine the configuration version.  By default, it will be the
-      time that the configuration is parsed, but you can provide a shell script to override how the
-      version is determined.  The output of this script will be added to every log message in the
-      reports, allowing you to correlate changes on your hosts to the source version on the server.
-
-      Setting a global value for config_version in puppet.conf is deprecated. Please set a
-      per-environment value in environment.conf instead. For more info, see
-      http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
-      :deprecated => :allowed_on_commandline,
-    },
-    :zlib => {
-        :default  => true,
-        :type     => :boolean,
-        :desc     => "Boolean; whether to use the zlib library",
+    :environment_data_provider => {
+      :default    => "none",
+      :desc       => "The name of a registered environment data provider. The two built in
+      and registered providers are 'none' (no environment specific data), and 'function'
+      (environment specific data obtained by calling the function 'environment::data()').
+      Other environment data providers may be registered in modules on the module path. For such
+      custom data providers see the respective module documentation."
     },
     :prerun_command => {
       :default    => "",
@@ -536,23 +473,6 @@ module Puppet
         :desc     => "Freezes the 'main' class, disallowing any code to be added to it.  This
           essentially means that you can't have any code outside of a node,
           class, or definition other than in the site manifest.",
-    },
-    :stringify_facts => {
-      :default => true,
-      :type    => :boolean,
-      :desc    => "Flatten fact values to strings using #to_s. Means you can't have arrays or
-        hashes as fact values. (DEPRECATED) This option will be removed in Puppet 4.0.",
-    },
-    :trusted_node_data => {
-      :default => false,
-      :type    => :boolean,
-      :desc    => "Stores trusted node data in a hash called $trusted.
-        When true also prevents $trusted from being overridden in any scope.",
-    },
-    :immutable_node_data => {
-      :default => '$trusted_node_data',
-      :type    => :boolean,
-      :desc    => "When true, also prevents $trusted and $facts from being overridden in any scope",
     }
   )
   Puppet.define_settings(:module_tool,
@@ -609,37 +529,6 @@ module Puppet
 
         Defaults to the node's fully qualified domain name.",
       :hook => proc { |value| raise(ArgumentError, "Certificate names must be lower case; see #1168") unless value == value.downcase }},
-    :certdnsnames => {
-      :default => '',
-      :hook    => proc do |value|
-        unless value.nil? or value == '' then
-          Puppet.warning <<WARN
-The `certdnsnames` setting is no longer functional,
-after CVE-2011-3872. We ignore the value completely.
-
-For your own certificate request you can set `dns_alt_names` in the
-configuration and it will apply locally.  There is no configuration option to
-set DNS alt names, or any other `subjectAltName` value, for another nodes
-certificate.
-
-Alternately you can use the `--dns_alt_names` command line option to set the
-labels added while generating your own CSR.
-WARN
-        end
-      end,
-      :desc    => <<EOT
-The `certdnsnames` setting is no longer functional,
-after CVE-2011-3872. We ignore the value completely.
-
-For your own certificate request you can set `dns_alt_names` in the
-configuration and it will apply locally.  There is no configuration option to
-set DNS alt names, or any other `subjectAltName` value, for another nodes
-certificate.
-
-Alternately you can use the `--dns_alt_names` command line option to set the
-labels added while generating your own CSR.
-EOT
-    },
     :dns_alt_names => {
       :default => '',
       :desc    => <<EOT,
@@ -824,12 +713,6 @@ EOT
           Certificate Revocation List (CRL)
           to all clients.  If enabled, CA chaining will almost definitely not work.",
     },
-    :certificate_expire_warning => {
-      :default  => "60d",
-      :type     => :duration,
-      :desc     => "The window of time leading up to a certificate's expiration that a notification
-        will be logged. This applies to CA, master, and agent certificates. #{AS_DURATION}"
-    },
     :digest_algorithm => {
         :default  => 'md5',
         :type     => :enum,
@@ -1011,6 +894,49 @@ EOT
       }
   )
 
+  define_settings(:environment,
+    :manifest => {
+      :default    => nil,
+      :type       => :file_or_directory,
+      :desc       => "The entry-point manifest for puppet master. This can be one file
+        or a directory of manifests to be evaluated in alphabetical order. Puppet manages
+        this path as a directory if one exists or if the path ends with a / or \\.
+
+        Setting a global value for `manifest` in puppet.conf is not allowed
+        (but it can be overridden from them commandline). Please use
+        directory environments instead. If you need to use something other than the
+        environment's `manifests` directory as the main manifest, you can set
+        `manifest` in environment.conf. For more info, see
+        http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
+    },
+    :modulepath => {
+      :default => "",
+      :type => :path,
+      :desc => "The search path for modules, as a list of directories separated by the system
+        path separator character. (The POSIX path separator is ':', and the
+        Windows path separator is ';'.)
+
+        Setting a global value for `modulepath` in puppet.conf is not allowed
+        (but it can be overridden from the commandline). Please use
+        directory environments instead. If you need to use something other than the
+        default modulepath of `<ACTIVE ENVIRONMENT'S MODULES DIR>:$basemodulepath`,
+        you can set `modulepath` in environment.conf. For more info, see
+        http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
+    },
+    :config_version => {
+      :default    => "",
+      :desc       => "How to determine the configuration version.  By default, it will be the
+      time that the configuration is parsed, but you can provide a shell script to override how the
+      version is determined.  The output of this script will be added to every log message in the
+      reports, allowing you to correlate changes on your hosts to the source version on the server.
+
+      Setting a global value for config_version in puppet.conf is not allowed
+      (but it can be overridden from the commandline). Please set a
+      per-environment value in environment.conf instead. For more info, see
+      http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
+    },
+  )
+
   define_settings(:master,
     :user => {
       :default    => "puppet",
@@ -1020,46 +946,42 @@ EOT
       :default    => "puppet",
       :desc       => "The group puppet master should run as.",
     },
-    :manifestdir => {
-      :default    => "$confdir/manifests",
-      :type       => :directory,
-      :desc       => "Used to build the default value of the `manifest` setting. Has no other purpose.
+    :default_manifest => {
+      :default    => "./manifests",
+      :type       => :string,
+      :desc       => "The default main manifest for directory environments. Any environment that
+        doesn't set the `manifest` setting in its `environment.conf` file will use
+        this manifest.
 
-        This setting is deprecated.",
-      :deprecated => :completely,
+        This setting's value can be an absolute or relative path. An absolute path
+        will make all environments default to the same main manifest; a relative
+        path will allow each environment to use its own manifest, and Puppet will
+        resolve the path relative to each environment's main directory.
+
+        In either case, the path can point to a single file or to a directory of
+        manifests to be evaluated in alphabetical order.",
     },
-    :manifest => {
-      :default    => "$manifestdir/site.pp",
-      :type       => :file_or_directory,
-      :desc       => "The entry-point manifest for puppet master. This can be one file
-        or a directory of manifests to be evaluated in alphabetical order. Puppet manages
-        this path as a directory if one exists or if the path ends with a / or \\.
+    :disable_per_environment_manifest => {
+      :default    => false,
+      :type       => :boolean,
+      :desc       => "Whether to disallow an environment-specific main manifest. When set
+        to `true`, Puppet will use the manifest specified in the `default_manifest` setting
+        for all environments. If an environment specifies a different main manifest in its
+        `environment.conf` file, catalog requests for that environment will fail with an error.
 
-        Setting a global value for `manifest` in puppet.conf is deprecated. Please use
-        directory environments instead. If you need to use something other than the
-        environment's `manifests` directory as the main manifest, you can set
-        `manifest` in environment.conf. For more info, see
-        http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
-      :deprecated => :allowed_on_commandline,
+        This setting requires `default_manifest` to be set to an absolute path.",
+      :hook       => proc do |value|
+        if value && !Pathname.new(Puppet[:default_manifest]).absolute?
+          raise(Puppet::Settings::ValidationError,
+                "The 'default_manifest' setting must be set to an absolute path when 'disable_per_environment_manifest' is true")
+        end
+      end,
     },
     :code => {
       :default    => "",
       :desc       => "Code to parse directly.  This is essentially only used
       by `puppet`, and should only be set if you're writing your own Puppet
       executable.",
-    },
-    :masterlog => {
-      :default => "$logdir/puppetmaster.log",
-      :type => :file,
-      :owner => "service",
-      :group => "service",
-      :mode => "0660",
-      :desc => "This file is literally never used, although Puppet may create it
-        as an empty file. For more context, see the `puppetdlog` setting and
-        puppet master's `--logdest` command line option.
-
-        This setting is deprecated and will be removed in a future version of Puppet.",
-      :deprecated => :completely
     },
     :masterhttplog => {
       :default => "$logdir/masterhttp.log",
@@ -1078,6 +1000,15 @@ EOT
       :desc       => "The port for puppet master traffic. For puppet master,
       this is the port to listen on; for puppet agent, this is the port
       to make requests on. Both applications use this setting to get the port.",
+    },
+    :master_url_prefix => {
+        :default => "/puppet",
+        :desc    => "The prefix at which the puppet master API is mounted.",
+        :hook    => proc do |value|
+          if !value.start_with?("/")
+            Puppet[:master_url_prefix] = "/#{value}"
+          end
+        end
     },
     :node_name => {
       :default    => "cert",
@@ -1108,6 +1039,11 @@ EOT
       :type       => :boolean,
       :desc       => "Whether the master should function as a certificate authority.",
     },
+    :trusted_oid_mapping_file => {
+      :default    => "$confdir/custom_trusted_oid_mapping.yaml",
+      :type       => :file,
+      :desc       => "File that provides mapping between custom SSL oids and user-friendly names"
+    },
     :basemodulepath => {
       :default => "$confdir/modules#{File::PATH_SEPARATOR}/usr/share/puppet/modules",
       :type => :path,
@@ -1115,27 +1051,10 @@ EOT
         list of directories separated by the system path separator character. (The
         POSIX path separator is ':', and the Windows path separator is ';'.)
 
-        If you are using directory environments, these are the modules that will
-        be used by _all_ environments. Note that the `modules` directory of the active
-        environment will have priority over any global directories. For more info, see
-        http://docs.puppetlabs.com/puppet/latest/reference/environments.html
-
-        This setting also provides the default value for the deprecated `modulepath`
-        setting, which is used when directory environments are disabled.",
-    },
-    :modulepath => {
-      :default => "$basemodulepath",
-      :type => :path,
-      :desc => "The search path for modules, as a list of directories separated by the system
-        path separator character. (The POSIX path separator is ':', and the
-        Windows path separator is ';'.)
-
-        Setting a global value for `modulepath` in puppet.conf is deprecated. Please use
-        directory environments instead. If you need to use something other than the
-        default modulepath of `<ACTIVE ENVIRONMENT'S MODULES DIR>:$basemodulepath`,
-        you can set `modulepath` in environment.conf. For more info, see
+        These are the modules that will be used by _all_ environments. Note that
+        the `modules` directory of the active environment will have priority over
+        any global directories. For more info, see
         http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
-      :deprecated => :allowed_on_commandline,
     },
     :ssl_client_header => {
       :default    => "HTTP_X_CLIENT_DN",
@@ -1182,7 +1101,7 @@ EOT
       :default    => "store",
       :desc       => "The list of report handlers to use. When using multiple report handlers,
         their names should be comma-separated, with whitespace allowed. (For example,
-        `reports = http, tagmail`.)
+        `reports = http, store`.)
 
         This setting is relevant to puppet master and puppet apply. The puppet
         master will call these report handlers with the reports it receives from
@@ -1223,25 +1142,6 @@ EOT
     }
   )
 
-  define_settings(:metrics,
-    :rrddir => {
-      :type     => :directory,
-      :default  => "$vardir/rrd",
-      :mode     => "0750",
-      :owner    => "service",
-      :group    => "service",
-      :desc     => "The directory where RRD database files are stored.
-        Directories for each reporting host will be created under
-        this directory."
-    },
-    :rrdinterval => {
-      :default  => "$runinterval",
-      :type     => :duration,
-      :desc     => "How often RRD should expect data.
-            This should match how often the hosts report back to the server. #{AS_DURATION}",
-    }
-  )
-
   define_settings(:device,
     :devicedir =>  {
         :default  => "$vardir/devices",
@@ -1277,13 +1177,6 @@ EOT
         end
       end
     },
-    :localconfig => {
-      :default => "$statedir/localconfig",
-      :type => :file,
-      :owner => "root",
-      :mode => "0660",
-      :desc => "Where puppet agent caches the local configuration.  An
-        extension indicating the cache format is added automatically."},
     :statefile => {
       :default => "$statedir/state.yaml",
       :type => :file,
@@ -1364,10 +1257,6 @@ EOT
       :desc       => "Boolean; whether to generate the default schedule resources. Setting this to
       false is useful for keeping external report processors clean of skipped schedule resources.",
     },
-    :puppetport => {
-      :default    => 8139,
-      :desc       => "Which port puppet agent listens on.",
-    },
     :noop => {
       :default    => false,
       :type       => :boolean,
@@ -1401,15 +1290,6 @@ EOT
           \"never run.\" If you want puppet agent to never run, you should start
           it with the `--no-client` option. #{AS_DURATION}",
     },
-    :listen => {
-      :default    => false,
-      :type       => :boolean,
-      :desc       => "Whether puppet agent should listen for
-      connections.  If this is true, then puppet agent will accept incoming
-      REST API requests, subject to the default ACLs and the ACLs set in
-      the `rest_authconfig` file. Puppet agent can respond usefully to
-      requests on the `run`, `facts`, `certificate`, and `resource` endpoints.",
-    },
     :ca_server => {
       :default    => "$server",
       :desc       => "The server to use for certificate
@@ -1420,18 +1300,6 @@ EOT
       :default    => "$masterport",
       :desc       => "The port to use for the certificate authority.",
     },
-    :catalog_format => {
-      :default => "",
-      :desc => "(Deprecated for 'preferred_serialization_format') What format to
-        use to dump the catalog.  Only supports 'marshal' and 'yaml'.  Only
-        matters on the client, since it asks the server for a specific format.",
-      :hook => proc { |value|
-        if value
-          Puppet.deprecation_warning "Setting 'catalog_format' is deprecated; use 'preferred_serialization_format' instead."
-          Puppet.settings.override_default(:preferred_serialization_format, value)
-        end
-      }
-    },
     :preferred_serialization_format => {
       :default    => "pson",
       :desc       => "The preferred means of serializing
@@ -1439,36 +1307,6 @@ EOT
       instances will be serialized using this method, since not all classes
       can be guaranteed to support this format, but it will be used for all
       classes that support it.",
-    },
-    :report_serialization_format => {
-      :default => "pson",
-      :type => :enum,
-      :values => ["pson", "yaml"],
-      :desc => "The serialization format to use when sending reports to the
-      `report_server`. Possible values are `pson` and `yaml`. This setting
-      affects puppet agent, but not puppet apply (which processes its own
-      reports).
-
-      This should almost always be set to `pson`. It can be temporarily set to
-      `yaml` to let agents using this Puppet version connect to a puppet master
-      running Puppet 3.0.0 through 3.2.x.
-
-      Note that this is set to 'yaml' automatically if the agent detects an
-      older master, so should never need to be set explicitly."
-    },
-    :legacy_query_parameter_serialization => {
-        :default    => false,
-        :type       => :boolean,
-        :desc => "The serialization format to use when sending file_metadata
-      query parameters.  Older versions of puppet master expect certain query
-      parameters to be serialized as yaml, which is deprecated.
-
-      This should almost always be false. It can be temporarily set to true
-      to let agents using this Puppet version connect to a puppet master
-      running Puppet 3.0.0 through 3.2.x.
-
-      Note that this is set to true automatically if the agent detects an
-      older master, so should never need to be set explicitly."
     },
     :agent_catalog_run_lockfile => {
       :default    => "$statedir/agent_catalog_run.lock",
@@ -1512,17 +1350,6 @@ EOT
         fact be stale even if the timestamps are up to date - if the facts
         change or if the server changes.",
     },
-    :dynamicfacts => {
-      :default    => "memorysize,memoryfree,swapsize,swapfree",
-      :desc       => "(Deprecated) Facts that are dynamic; these facts will be ignored when deciding whether
-        changed facts should result in a recompile.  Multiple facts should be
-        comma-separated.",
-      :hook => proc { |value|
-        if value
-          Puppet.deprecation_warning "The dynamicfacts setting is deprecated and will be ignored."
-        end
-      }
-    },
     :splaylimit => {
       :default    => "$runinterval",
       :type       => :duration,
@@ -1545,8 +1372,14 @@ EOT
       :default  => "2m",
       :type     => :duration,
       :desc     => "How long the client should wait for the configuration to be retrieved
-        before considering it a failure.  This can help reduce flapping if too
-        many clients contact the server at one time. #{AS_DURATION}",
+        before considering it a failure. This setting is deprecated and has been replaced
+        by http_connect_timeout and http_read_timeout.
+        #{AS_DURATION}",
+      :deprecated => :completely,
+      :hook       => proc do |value|
+        Puppet[:http_connect_timeout] = value
+        Puppet[:http_read_timeout]    = value
+      end
     },
     :report_server => {
       :default  => "$server",
@@ -1555,14 +1388,6 @@ EOT
     :report_port => {
       :default  => "$masterport",
       :desc     => "The port to communicate with the report_server.",
-    },
-    :inventory_server => {
-      :default  => "$server",
-      :desc     => "The server to send facts to.",
-    },
-    :inventory_port => {
-      :default  => "$masterport",
-      :desc     => "The port to communicate with the inventory_server.",
     },
     :report => {
       :default  => true,
@@ -1593,17 +1418,6 @@ EOT
       :type       => :directory,
       :desc       => "Where to store dot-outputted graphs.",
     },
-    :http_compression => {
-      :default    => false,
-      :type       => :boolean,
-      :desc       => "Allow http compression in REST communication with the master.
-        This setting might improve performance for agent -> master
-        communications over slow WANs. Your puppet master needs to support
-        compression (usually by activating some settings in a reverse-proxy in
-        front of the puppet master, which rules out webrick). It is harmless to
-        activate this settings if your master doesn't support compression, but
-        if it supports it, this setting might reduce performance on high-speed LANs.",
-    },
     :waitforcert => {
       :default  => "2m",
       :type     => :duration,
@@ -1624,15 +1438,17 @@ EOT
     :ordering => {
       :type => :enum,
       :values => ["manifest", "title-hash", "random"],
-      :default => "title-hash",
+      :default => "manifest",
       :desc => "How unrelated resources should be ordered when applying a catalog.
       Allowed values are `title-hash`, `manifest`, and `random`. This
       setting affects puppet agent and puppet apply, but not puppet master.
 
-      * `title-hash` (the default) will order resources randomly, but will use
-        the same order across runs and across nodes.
-      * `manifest` will use the order in which the resources were declared in
-        their manifest files.
+      * `manifest` (the default) will use the order in which the resources were
+        declared in their manifest files.
+      * `title-hash` (the default in 3.x) will order resources randomly, but
+        will use the same order across runs and across nodes. It is only of
+        value if you're migrating from 3.x and have errors running with
+        `manifest`.
       * `random` will order resources randomly and change their order with each
         run. This can work like a fuzzer for shaking out undeclared dependencies.
 
@@ -1666,7 +1482,7 @@ EOT
       server.",
     },
     :pluginsource => {
-      :default    => "puppet://$server/plugins",
+      :default    => "puppet:///plugins",
       :desc       => "From where to retrieve plugins.  The standard Puppet `file` type
       is used for retrieval, so anything that is a valid file source can
       be used here.",
@@ -1677,7 +1493,7 @@ EOT
       :desc     => "Where Puppet should store external facts that are being handled by pluginsync",
     },
     :pluginfactsource => {
-      :default  => "puppet://$server/pluginfacts",
+      :default  => "puppet:///pluginfacts",
       :desc     => "Where to retrieve external facts for pluginsync",
     },
     :pluginsync => {
@@ -1711,120 +1527,7 @@ EOT
     }
   )
 
-
-    define_settings(
-    :tagmail,
-    :tagmap => {
-      :default    => "$confdir/tagmail.conf",
-      :desc       => "The mapping between reporting tags and email addresses.",
-    },
-    :sendmail => {
-      :default    => which('sendmail') || '',
-      :desc       => "Where to find the sendmail binary with which to send email.",
-    },
-
-    :reportfrom => {
-        :default  => lambda { "report@#{Puppet::Settings.default_certname.downcase}" },
-        :desc     => "The 'from' email address for the reports.",
-    },
-
-    :smtpserver => {
-        :default  => "none",
-        :desc     => "The server through which to send email reports.",
-    },
-    :smtpport => {
-        :default  => 25,
-        :desc     => "The TCP port through which to send email reports.",
-    },
-    :smtphelo => {
-        :default  => lambda { Facter.value 'fqdn' },
-        :desc     => "The name by which we identify ourselves in SMTP HELO for reports.
-          If you send to a smtpserver which does strict HELO checking (as with Postfix's
-          `smtpd_helo_restrictions` access controls), you may need to ensure this resolves.",
-    }
-  )
-
-    define_settings(
-    :rails,
-    :dblocation => {
-      :default  => "$statedir/clientconfigs.sqlite3",
-      :type     => :file,
-      :mode     => "0660",
-      :owner    => "service",
-      :group    => "service",
-      :desc     => "The sqlite database file. #{STORECONFIGS_ONLY}"
-    },
-    :dbadapter => {
-      :default  => "sqlite3",
-      :desc     => "The type of database to use. #{STORECONFIGS_ONLY}",
-    },
-    :dbmigrate => {
-      :default  => false,
-      :type     => :boolean,
-      :desc     => "Whether to automatically migrate the database. #{STORECONFIGS_ONLY}",
-    },
-    :dbname => {
-      :default  => "puppet",
-      :desc     => "The name of the database to use. #{STORECONFIGS_ONLY}",
-    },
-    :dbserver => {
-      :default  => "localhost",
-      :desc     => "The database server for caching. Only
-      used when networked databases are used.",
-    },
-    :dbport => {
-      :default  => "",
-      :desc     => "The database password for caching. Only
-        used when networked databases are used. #{STORECONFIGS_ONLY}",
-    },
-    :dbuser => {
-      :default  => "puppet",
-      :desc     => "The database user for caching. Only
-        used when networked databases are used. #{STORECONFIGS_ONLY}",
-    },
-    :dbpassword => {
-      :default  => "puppet",
-      :desc     => "The database password for caching. Only
-        used when networked databases are used. #{STORECONFIGS_ONLY}",
-    },
-    :dbconnections => {
-      :default  => '',
-      :desc     => "The number of database connections for networked
-        databases.  Will be ignored unless the value is a positive integer. #{STORECONFIGS_ONLY}",
-    },
-    :dbsocket => {
-      :default  => "",
-      :desc     => "The database socket location. Only used when networked
-        databases are used.  Will be ignored if the value is an empty string. #{STORECONFIGS_ONLY}",
-    },
-    :railslog => {
-      :default  => "$logdir/rails.log",
-      :type     => :file,
-      :mode     => "0600",
-      :owner    => "service",
-      :group    => "service",
-      :desc     => "Where Rails-specific logs are sent. #{STORECONFIGS_ONLY}"
-    },
-
-    :rails_loglevel => {
-        :default  => "info",
-        :desc     => "The log level for Rails connections.  The value must be
-          a valid log level within Rails.  Production environments normally use `info`
-          and other environments normally use `debug`. #{STORECONFIGS_ONLY}",
-    }
-  )
-
-    define_settings(
-    :couchdb,
-
-    :couchdb_url => {
-        :default  => "http://127.0.0.1:5984/puppet",
-        :desc     => "The url where the puppet couchdb database will be created.
-          Only used when `facts_terminus` is set to `couch`.",
-    }
-  )
-
-    define_settings(
+  define_settings(
     :transaction,
     :tags => {
       :default    => "",
@@ -1935,11 +1638,10 @@ EOT
       :default  => false,
       :type     => :boolean,
       :desc     => "Whether to store each client's configuration, including catalogs, facts,
-        and related data.  This also enables the import and export of resources in
+        and related data. This also enables the import and export of resources in
         the Puppet language - a mechanism for exchange resources between nodes.
 
-        By default this uses ActiveRecord and an SQL database to store and query
-        the data; this, in turn, will depend on Rails being available.
+        By default this uses the 'puppetdb' backend.
 
         You can adjust the backend using the storeconfigs_backend setting.",
       # Call our hook with the default value, so we always get the libdir set.
@@ -1948,67 +1650,23 @@ EOT
         require 'puppet/node'
         require 'puppet/node/facts'
         if value
-          if not Puppet.settings[:async_storeconfigs]
-            Puppet::Resource::Catalog.indirection.cache_class = :store_configs
-            Puppet.settings.override_default(:catalog_cache_terminus, :store_configs)
-          end
+          Puppet::Resource::Catalog.indirection.cache_class = :store_configs
+          Puppet.settings.override_default(:catalog_cache_terminus, :store_configs)
           Puppet::Node::Facts.indirection.cache_class = :store_configs
-
           Puppet::Resource.indirection.terminus_class = :store_configs
         end
       end
     },
     :storeconfigs_backend => {
       :type => :terminus,
-      :default => "active_record",
+      :default => "puppetdb",
       :desc => "Configure the backend terminus used for StoreConfigs.
-        By default, this uses the ActiveRecord store, which directly talks to the
-        database from within the Puppet Master process."
+        By default, this uses the PuppetDB store, which must be installed
+        and configured before turning on StoreConfigs."
     }
   )
 
   define_settings(:parser,
-    :templatedir => {
-        :default  => "$vardir/templates",
-        :type     => :directory,
-        :desc     => "Where Puppet looks for template files.  Can be a list of colon-separated
-          directories.
-
-          This setting is deprecated. Please put your templates in modules instead.",
-        :deprecated => :completely,
-    },
-
-    :allow_variables_with_dashes => {
-      :default => false,
-      :desc    => <<-'EOT'
-        Permit hyphens (`-`) in variable names and issue deprecation warnings about
-        them. This setting **should always be `false`;** setting it to `true`
-        will cause subtle and wide-ranging bugs. It will be removed in a future version.
-
-        Hyphenated variables caused major problems in the language, but were allowed
-        between Puppet 2.7.3 and 2.7.14. If you used them during this window, we
-        apologize for the inconvenience --- you can temporarily set this to `true`
-        in order to upgrade, and can rename your variables at your leisure. Please
-        revert it to `false` after you have renamed all affected variables.
-      EOT
-    },
-    :parser => {
-      :default => "current",
-      :desc => <<-'EOT'
-        Selects the parser to use for parsing puppet manifests (in puppet DSL
-        language/'.pp' files). Available choices are `current` (the default)
-        and `future`.
-
-        The `current` parser means that the released version of the parser should
-        be used.
-
-        The `future` parser is a "time travel to the future" allowing early
-        exposure to new language features. What these features are will vary from
-        release to release and they may be invididually configurable.
-
-        Available Since Puppet 3.2.
-      EOT
-    },
    :max_errors => {
      :default => 10,
      :desc => <<-'EOT'

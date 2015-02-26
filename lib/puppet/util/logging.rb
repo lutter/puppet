@@ -1,6 +1,7 @@
 # A module to make logging a bit easier.
 require 'puppet/util/log'
 require 'puppet/error'
+require 'facter'
 
 module Puppet::Util::Logging
 
@@ -10,9 +11,30 @@ module Puppet::Util::Logging
 
   # Create a method for each log level.
   Puppet::Util::Log.eachlevel do |level|
+    # handle debug a special way for performance reasons
+    next if level == :debug
     define_method(level) do |args|
       args = args.join(" ") if args.is_a?(Array)
       send_log(level, args)
+    end
+  end
+
+  # Output a debug log message if debugging is on (but only then)
+  # If the output is anything except a static string, give the debug
+  # a block - it will be called with all other arguments, and is expected
+  # to return the single string result.
+  #
+  # Use a block at all times for increased performance.
+  #
+  # @example This takes 40% of the time compared to not using a block
+  #  Puppet.debug { "This is a string that interpolated #{x} and #{y} }"
+  #
+  def debug(*args)
+    return nil unless Puppet::Util::Log.level == :debug
+    if block_given?
+      send_log(:debug, yield(*args))
+    else
+      send_log(:debug, args.join(" "))
     end
   end
 
@@ -139,6 +161,35 @@ module Puppet::Util::Logging
         end
       end
     end
+  end
+
+  # Sets up Facter logging.
+  # This method causes Facter output to be forwarded to Puppet.
+  def self.setup_facter_logging!
+    # Only recent versions of Facter support this feature
+    return false unless Facter.respond_to? :on_message
+
+    # The current Facter log levels are: :trace, :debug, :info, :warn, :error, and :fatal.
+    # Convert to the corresponding levels in Puppet
+    Facter.on_message do |level, message|
+      case level
+      when :trace, :debug
+        level = :debug
+      when :info
+        # Same as Puppet
+      when :warn
+        level = :warning
+      when :error
+        level = :err
+      when :fatal
+        level = :crit
+      else
+        next
+      end
+      Puppet::Util::Log.create({:level => level, :source => 'Facter', :message => message})
+      nil
+    end
+    true
   end
 
   private

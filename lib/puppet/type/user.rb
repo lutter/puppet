@@ -6,7 +6,7 @@ require 'puppet/property/ordered_list'
 require 'puppet/property/keyvalue'
 
 module Puppet
-  newtype(:user) do
+  Type.newtype(:user) do
     @doc = "Manage users.  This type is mostly built to manage system
       users, so it is lacking some features useful for managing normal
       users.
@@ -56,6 +56,9 @@ module Puppet
 
     feature :manages_shell,
       "The provider allows for setting shell and validates if possible"
+
+    feature :manages_loginclass,
+      "The provider can manage the login class for a user."
 
     newproperty(:ensure, :parent => Puppet::Property::Ensure) do
       newvalue(:present, :event => :user_created) do
@@ -326,8 +329,8 @@ module Puppet
     newproperty(:expiry, :required_features => :manages_expiry) do
       desc "The expiry date for this user. Must be provided in
            a zero-padded YYYY-MM-DD format --- e.g. 2010-02-19.
-           If you want to make sure the user account does never
-           expire, you can pass the special value `absent`."
+           If you want to ensure the user account never expires,
+           you can pass the special value `absent`."
 
       newvalues :absent
       newvalues /^\d{4}-\d{2}-\d{2}$/
@@ -639,6 +642,16 @@ module Puppet
       end
     end
 
+    newproperty(:loginclass, :required_features => :manages_loginclass) do
+      desc "The name of login class to which the user belongs."
+
+      validate do |value|
+        if value =~ /^\d+$/
+          raise ArgumentError, "Class name must be provided."
+        end
+      end
+    end
+
     # Generate ssh_authorized_keys resources for purging. The key files are
     # taken from the purge_ssh_keys parameter. The generated resources inherit
     # all metaparameters from the parent user resource.
@@ -670,10 +683,20 @@ module Puppet
     #   representing the found keys
     def unknown_keys_in_file(keyfile)
       names = []
+      name_index = 0
       File.new(keyfile).each do |line|
         next unless line =~ Puppet::Type.type(:ssh_authorized_key).keyline_regex
         # the name is stored in the 4th capture of the regex
-        names << $4
+        name = $4
+        if name.empty?
+          key = $3.delete("\n")
+          # If no comment is specified for this key, generate a unique internal
+          # name. This uses the same rules as
+          # provider/ssh_authorized_key/parsed (PUP-3357)
+          name = "#{keyfile}:unnamed-#{name_index += 1}"
+        end
+        names << name
+        Puppet.debug "#{self.ref} parsed for purging Ssh_authorized_key[#{name}]"
       end
 
       names.map { |keyname|

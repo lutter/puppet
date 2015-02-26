@@ -19,11 +19,11 @@ Puppet::Type.newtype(:resources) do
   end
 
   newparam(:purge, :boolean => true, :parent => Puppet::Parameter::Boolean) do
-    desc "Purge unmanaged resources.  This will delete any resource
-      that is not specified in your configuration
-      and is not required by any specified resources.
-      Purging ssh_authorized_keys this way is deprecated; see the
-      purge_ssh_keys parameter of the user type for a better alternative."
+    desc "Whether to purge unmanaged resources.  When set to `true`, this will
+      delete any resource that is not specified in your configuration and is not
+      autorequired by any managed resources. **Note:** The `ssh_authorized_key`
+      resource type can't be purged this way; instead, see the `purge_ssh_keys`
+      attribute of the `user` type."
 
     defaultto :false
 
@@ -132,13 +132,6 @@ Puppet::Type.newtype(:resources) do
       @resource_type = type
     end
     @resource_type
-  end
-
-  def self.deprecate_params(title,params)
-    return unless params
-    if title == 'cron' and ! params.select { |param| param.name.intern == :purge and param.value == true }.empty?
-      Puppet.deprecation_warning("Change notice: purging cron entries will be more aggressive in future versions, take care when updating your agents. See http://links.puppetlabs.com/puppet-aggressive-cron-purge")
-    end
   end
 
   # Make sure we don't purge users with specific uids

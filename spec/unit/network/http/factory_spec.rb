@@ -18,7 +18,7 @@ describe Puppet::Network::HTTP::Factory do
   it 'creates a connection for the site' do
     conn = create_connection(site)
 
-    expect(conn.use_ssl?).to be_true
+    expect(conn.use_ssl?).to be_truthy
     expect(conn.address).to eq(site.host)
     expect(conn.port).to eq(site.port)
   end
@@ -32,7 +32,7 @@ describe Puppet::Network::HTTP::Factory do
   it 'creates a connection supporting at least HTTP 1.1' do
     conn = create_connection(site)
 
-    expect(any_of(conn.class.version_1_1?, conn.class.version_1_1?)).to be_true
+    expect(any_of(conn.class.version_1_1?, conn.class.version_1_1?)).to be_truthy
   end
 
   context "proxy settings" do
@@ -62,20 +62,18 @@ describe Puppet::Network::HTTP::Factory do
     end
 
     context 'socket timeouts' do
-      let(:timeout) { 5 }
-
       it 'sets open timeout' do
-        Puppet[:configtimeout] = timeout
+        Puppet[:http_connect_timeout] = "10s"
         conn = create_connection(site)
 
-        expect(conn.open_timeout).to eq(timeout)
+        expect(conn.open_timeout).to eq(10)
       end
 
       it 'sets read timeout' do
-        Puppet[:configtimeout] = timeout
+        Puppet[:http_read_timeout] = "2m"
         conn = create_connection(site)
 
-        expect(conn.read_timeout).to eq(timeout)
+        expect(conn.read_timeout).to eq(120)
       end
     end
   end

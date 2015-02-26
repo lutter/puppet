@@ -29,19 +29,6 @@ class Puppet::Parameter
   class << self
     include Puppet::Util
     include Puppet::Util::Docs
-    # Unused?
-    # @todo The term "validater" only appears in this location in the Puppet code base. There is `validate`
-    #   which seems to works fine without this attribute declaration.
-    # @api private
-    #
-    attr_reader :validater
-
-    # Unused?
-    # @todo The term "munger" only appears in this location in the Puppet code base. There is munge and unmunge
-    #  and they seem to work perfectly fine without this attribute declaration.
-    # @api private
-    #
-    attr_reader :munger
 
     # @return [Symbol] The parameter name as given when it was created.
     attr_reader :name
@@ -121,8 +108,8 @@ class Puppet::Parameter
           @doc << "\n\n#{vals}"
         end
 
-        if f = self.required_features
-          @doc << "\n\nRequires features #{f.flatten.collect { |f| f.to_s }.join(" ")}."
+        if features = self.required_features
+          @doc << "\n\nRequires features #{features.flatten.collect { |f| f.to_s }.join(" ")}."
         end
         @addeddocvals = true
       end
@@ -555,7 +542,7 @@ class Puppet::Parameter
   #
   def self.format_value_for_display(value)
     if value.is_a? Array
-      formatted_values = value.collect {|value| format_value_for_display(value)}.join(', ')
+      formatted_values = value.collect {|v| format_value_for_display(v)}.join(', ')
       "[#{formatted_values}]"
     elsif value.is_a? Hash
       # Sorting the hash keys for display is largely for having stable

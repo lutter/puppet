@@ -28,7 +28,7 @@ module Puppet
             "#{manifestpath}":;
             "#{manifestpath}/site.pp":
               ensure => file,
-              mode => 0640,
+              mode => "0640",
               content => '
                 notify { "in #{env_name} site.pp": }
                 include testing_mod
@@ -47,7 +47,7 @@ module Puppet
 
             "#{modulepath}/#{module_name}/manifests/init.pp":
               ensure => file,
-              mode => 0640,
+              mode => "0640",
               content => 'class #{module_name} {
                 notify { "include #{env_name} #{module_name}": }
               }'
@@ -67,7 +67,7 @@ module Puppet
             ensure => directory,
             owner => #{master['user']},
             group => #{master['group']},
-            mode => 0750,
+            mode => "0750",
           }
 
           file { "#{testdir}": }
@@ -113,7 +113,7 @@ module Puppet
 
           file { "#{testdir}/environments/testing_environment_conf/environment.conf":
             ensure => file,
-            mode => 0640,
+            mode => "0640",
             content => '
               modulepath = nonstandard-modules:$basemodulepath
               manifest = nonstandard-manifests
@@ -124,7 +124,7 @@ module Puppet
           file {
             "#{testdir}/environments/testing_environment_conf/local-version.sh":
               ensure => file,
-              mode => 0640,
+              mode => "0640",
               content => '#! /usr/bin/env bash
               echo "local testing_environment_conf"'
             ;
@@ -147,7 +147,7 @@ module Puppet
           file {
             "#{testdir}/static-version.sh":
               ensure => file,
-              mode => 0640,
+              mode => "0640",
               content => '#! /usr/bin/env bash
               echo "static"'
             ;
@@ -183,10 +183,21 @@ module Puppet
           end
         end
 
-        step "open permissions to 770 on all temporary files copied into working dir and set ownership" do
-          file_list = new_files.keys.map { |name| "#{original_path}/#{name}" }.join(' ')
-          on(host, "chown -R #{host['user']}:#{host['group']} #{file_list}")
-          on(host, "chmod -R 770 #{file_list}")
+        new_file_list = new_files.keys.map { |name| "#{original_path}/#{name}" }.join(' ')
+        step "open permissions to 755 on all temporary files copied into working dir and set ownership" do
+          on(host, "chown -R #{host.puppet['user']}:#{host.puppet['group']} #{new_file_list}")
+          on(host, "chmod -R 755 #{new_file_list}")
+        end
+
+        if host.check_for_command("selinuxenabled")
+          result = on(host, "selinuxenabled", :acceptable_exit_codes => [0,1])
+
+          if result.exit_code == 0
+            step "mirror selinux contexts" do
+              context = on(host, "matchpathcon #{original_path}").stdout.chomp.split(' ')[1]
+              on(host, "chcon -R #{context} #{new_file_list}")
+            end
+          end
         end
 
         yield

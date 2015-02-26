@@ -5,6 +5,7 @@ require 'puppet/resource/catalog'
 require 'puppet/util/errors'
 
 require 'puppet/resource/type_collection_helper'
+require 'puppet/loaders'
 
 # Maintain a graph of scopes, along with a bunch of data
 # about the individual catalog we're compiling.
@@ -20,7 +21,17 @@ class Puppet::Parser::Compiler
     $env_module_directories = nil
     node.environment.check_for_reparse
 
-    new(node).compile.to_resource
+    errors = node.environment.validation_errors
+    if !errors.empty?
+      errors.each { |e| Puppet.err(e) } if errors.size > 1
+      errmsg = [
+        "Compilation has been halted because: #{errors.first}",
+        "For more information, see http://docs.puppetlabs.com/puppet/latest/reference/environments.html",
+      ]
+      raise(Puppet::Error, errmsg.join(' '))
+    end
+
+    new(node).compile {|resulting_catalog| resulting_catalog.to_resource }
   rescue => detail
     message = "#{detail} on node #{node.name}"
     Puppet.log_exception(detail, message)
@@ -67,6 +78,29 @@ class Puppet::Parser::Compiler
   end
 
   def add_resource(scope, resource)
+    type = resource.resource_type
+    if type.is_a?(Puppet::Resource::Type) && type.application?
+      @applications << resource
+      return
+    end
+
+    if @current_app
+      # We are in the process of pulling application components out that
+      # apply to this node
+      Puppet.notice "Check #{resource}"
+      return unless @current_components.any? do |comp|
+        comp.type == resource.type && comp.title == resource.title
+      end
+      # @todo lutter 2015-01-29: we tag the overall component to indicate
+      # to which application it belongs. More of that fun is done in
+      # Puppet::Resource::Type#evaluate_code. One of the problems with
+      # using tags here is that PuppetDB does not consider a resource
+      # changed if all that changed were its tags, so that certain changes
+      # in hte manifest (e.g., just renaming an application instance) will
+      # lead to improperly tagged capabilities in PuppetDB
+      resource.tag(producer_tag)
+    end
+
     @resources << resource
 
     # Note that this will fail if the resource is not unique.
@@ -97,6 +131,17 @@ class Puppet::Parser::Compiler
   end
 
 
+  # Return a tag that indicates in which context a resource has been
+  # created. This is used to tag produced capabilities according to the
+  # application they belong to
+  def producer_tag
+    if @current_app
+      "producer:#{@current_app.type}:#{@current_app.title}"
+    else
+      "producer:main"
+    end
+  end
+
   # Return a list of all of the defined classes.
   def_delegator :@catalog, :classes, :classlist
 
@@ -111,11 +156,7 @@ class Puppet::Parser::Compiler
 
       Puppet::Util::Profiler.profile("Compile: Created settings scope", [:compiler, :create_settings_scope]) { create_settings_scope }
 
-      if is_binder_active?
-        # create injector, if not already created - this is for 3x that does not trigger
-        # lazy loading of injector via context
-        Puppet::Util::Profiler.profile("Compile: Created injector", [:compiler, :create_injector]) { injector }
-      end
+      activate_binder
 
       Puppet::Util::Profiler.profile("Compile: Evaluated main", [:compiler, :evaluate_main]) { evaluate_main }
 
@@ -123,31 +164,30 @@ class Puppet::Parser::Compiler
 
       Puppet::Util::Profiler.profile("Compile: Evaluated node classes", [:compiler, :evaluate_node_classes]) { evaluate_node_classes }
 
+      Puppet::Util::Profiler.profile("Compile: Evaluated node classes", [:compiler, :evaluate_applications]) { evaluate_applications }
+
       Puppet::Util::Profiler.profile("Compile: Evaluated generators", [:compiler, :evaluate_generators]) { evaluate_generators }
 
       Puppet::Util::Profiler.profile("Compile: Finished catalog", [:compiler, :finish_catalog]) { finish }
 
       fail_on_unevaluated
 
-      @catalog
+      if block_given?
+        yield @catalog
+      else
+        @catalog
+      end
     end
   end
 
   # Constructs the overrides for the context
   def context_overrides()
-    if Puppet[:parser] == 'future'
-      require 'puppet/loaders'
-      {
-        :current_environment => environment,
-        :global_scope => @topscope,             # 4x placeholder for new global scope
-        :loaders  => lambda {|| loaders() },    # 4x loaders
-        :injector => lambda {|| injector() }    # 4x API - via context instead of via compiler
-      }
-    else
-      {
-        :current_environment => environment,
-      }
-    end
+    {
+      :current_environment => environment,
+      :global_scope => @topscope,             # 4x placeholder for new global scope
+      :loaders  => lambda {|| loaders() },    # 4x loaders
+      :injector => lambda {|| injector() }    # 4x API - via context instead of via compiler
+    }
   end
 
   def_delegator :@collections, :delete, :delete_collection
@@ -176,23 +216,54 @@ class Puppet::Parser::Compiler
       classes_without_params = @node.classes
     end
 
-    evaluate_classes(classes_without_params, @node_scope || topscope)
-
     evaluate_classes(classes_with_params, @node_scope || topscope)
+    evaluate_classes(classes_without_params, @node_scope || topscope)
   end
 
-  # Evaluate each specified class in turn.  If there are any classes we can't
-  # find, raise an error.  This method really just creates resource objects
+  def evaluate_applications
+    @applications.each do |app|
+      mapping = app.parameters[:nodes].value
+      components = []
+      mapping.each do |k,v|
+        k = [k] unless k.is_a?(Array)
+        v = [v] unless v.is_a?(Array)
+        k.each do |key|
+          v.each do |val|
+            key, val = val, key if val.type == "Node"
+            if key.type == "Node" && key.title == node.name
+              components << val
+            end
+          end
+        end
+      end
+      # @todo lutter 2015-01-28: We use @current_app and @curremt_comp to
+      # signal to the evaluator that we are in the middle of evaluating an
+      # application.
+      begin
+        @current_app = app
+        @current_components = components
+        unless @current_components.empty?
+          Puppet.notice "EVAL APP #{app} #{components.inspect}"
+          # Add the app itself since components mapped to the current node
+          # will have a containment edge for it
+          # @todo lutter 2015-01-28: the node mapping winds up in the
+          # catalog, but probably shouldn't
+          @catalog.add_resource(@current_app)
+          @current_app.evaluate
+        end
+      ensure
+        @current_app = nil
+        @current_components = nil
+      end
+    end
+  end
+
+  # Evaluates each specified class in turn. If there are any classes that 
+  # can't be found, an error is raised. This method really just creates resource objects
   # that point back to the classes, and then the resources are themselves
   # evaluated later in the process.
   #
-  # Sometimes we evaluate classes with a fully qualified name already, in which
-  # case, we tell scope.find_hostclass we've pre-qualified the name so it
-  # doesn't need to search its namespaces again.  This gets around a weird
-  # edge case of duplicate class names, one at top scope and one nested in our
-  # namespace and the wrong one (or both!) getting selected. See ticket #13349
-  # for more detail.  --jeffweiss 26 apr 2012
-  def evaluate_classes(classes, scope, lazy_evaluate = true, fqname = false)
+  def evaluate_classes(classes, scope, lazy_evaluate = true)
     raise Puppet::DevError, "No source for scope passed to evaluate_classes" unless scope.source
     class_parameters = nil
     # if we are a param class, save the classes hash
@@ -203,7 +274,7 @@ class Puppet::Parser::Compiler
     end
 
     hostclasses = classes.collect do |name|
-      scope.find_hostclass(name, :assume_fqname => fqname) or raise Puppet::Error, "Could not find class #{name} for #{node.name}"
+      scope.find_hostclass(name) or raise Puppet::Error, "Could not find class #{name} for #{node.name}"
     end
 
     if class_parameters
@@ -232,6 +303,8 @@ class Puppet::Parser::Compiler
 
   def initialize(node, options = {})
     @node = node
+    # Array of resources representing all application instances we've found
+    @applications = []
     set_options(options)
     initvars
   end
@@ -279,19 +352,16 @@ class Puppet::Parser::Compiler
 
   # Answers if Puppet Binder should be active or not, and if it should and is not active, then it is activated.
   # @return [Boolean] true if the Puppet Binder should be activated
-  def is_binder_active?
-    should_be_active = Puppet[:binder] || Puppet[:parser] == 'future'
-    if should_be_active
-      # TODO: this should be in a central place, not just for ParserFactory anymore...
-      Puppet::Parser::ParserFactory.assert_rgen_installed()
-      @@binder_loaded ||= false
-      unless @@binder_loaded
-        require 'puppet/pops'
-        require 'puppetx'
-        @@binder_loaded = true
-      end
+  def activate_binder
+    # TODO: this should be in a central place
+    Puppet::Parser::ParserFactory.assert_rgen_installed()
+    @@binder_loaded ||= false
+    unless @@binder_loaded
+      require 'puppet/pops'
+      require 'puppet/plugins/configuration'
+      @@binder_loaded = true
     end
-    should_be_active
+    true
   end
 
   private
@@ -401,7 +471,7 @@ class Puppet::Parser::Compiler
 
   # Find and evaluate our main object, if possible.
   def evaluate_main
-    @main = known_resource_types.find_hostclass([""], "") || known_resource_types.add(Puppet::Resource::Type.new(:hostclass, ""))
+    @main = known_resource_types.find_hostclass("") || known_resource_types.add(Puppet::Resource::Type.new(:hostclass, ""))
     @topscope.source = @main
     @main_resource = Puppet::Parser::Resource.new("class", :main, :scope => @topscope, :source => @main)
     @topscope.resource = @main_resource
@@ -429,12 +499,12 @@ class Puppet::Parser::Compiler
     end
   end
 
-  # Make sure we don't have any remaining collections that specifically
-  # look for resources, because we want to consider those to be
-  # parse errors.
+  # Make sure there are no remaining collections that are waiting for
+  # resources that have not yet been instantiated. If this occurs it
+  # is an error (missing resource - it could not be realized).
+  #
   def fail_on_unevaluated_resource_collections
-    remaining = @collections.collect(&:resources).flatten.compact
-
+    remaining = @collections.collect(&:unresolved_resources).flatten.compact
     if !remaining.empty?
       raise Puppet::ParseError, "Failed to realize virtual resources #{remaining.join(', ')}"
     end
@@ -526,7 +596,7 @@ class Puppet::Parser::Compiler
     @topscope = Puppet::Parser::Scope.new(self)
 
     # Need to compute overrides here, and remember them, because we are about to
-    # enter the magic zone of known_resource_types and intial import.
+    # enter the magic zone of known_resource_types and initial import.
     # Expensive entries in the context are bound lazily.
     @context_overrides = context_overrides()
 
@@ -561,13 +631,9 @@ class Puppet::Parser::Compiler
     # These might be nil.
     catalog.client_version = node.parameters["clientversion"]
     catalog.server_version = node.parameters["serverversion"]
-    if Puppet[:trusted_node_data]
-      @topscope.set_trusted(node.trusted_data)
-    end
-    if(Puppet[:immutable_node_data])
-      facts_hash = node.facts.nil? ? {} : node.facts.values
-      @topscope.set_facts(facts_hash)
-    end
+    @topscope.set_trusted(node.trusted_data)
+    facts_hash = node.facts.nil? ? {} : node.facts.values
+    @topscope.set_facts(facts_hash)
   end
 
   def create_settings_scope
@@ -608,8 +674,8 @@ class Puppet::Parser::Compiler
   end
 
   def assert_binder_active
-    unless is_binder_active?
-      raise ArgumentError, "The Puppet Binder is only available when either '--binder true' or '--parser future' is used"
+    unless activate_binder()
+      raise Puppet::DevError, "The Puppet Binder was not activated"
     end
   end
 end

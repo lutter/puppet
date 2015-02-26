@@ -1,7 +1,8 @@
 #! /usr/bin/env ruby
 require 'spec_helper'
+require 'puppet/parser/ast/block_expression'
 
-describe Puppet::Parser::AST::BlockExpression do
+describe 'Puppet::Parser::AST::BlockExpression' do
   class StackDepthAST < Puppet::Parser::AST
     attr_reader :call_depth
     def evaluate(*options)
@@ -28,7 +29,7 @@ describe Puppet::Parser::AST::BlockExpression do
   def assert_all_at_same_depth(*probes)
     depth0 = probes[0].call_depth
     probes.drop(1).each do |p|
-      p.call_depth.should == depth0
+      expect(p.call_depth).to eq(depth0)
     end
   end
 

@@ -3,10 +3,8 @@ require 'spec_helper'
 
 describe "Puppet::Resource::Ral" do
 
-  it "is deprecated on the network, but still allows requests" do
-    Puppet.expects(:deprecation_warning)
-
-    expect(Puppet::Resource::Ral.new.allow_remote_requests?).to eq(true)
+  it "disallows remote requests" do
+    expect(Puppet::Resource::Ral.new.allow_remote_requests?).to eq(false)
   end
 
   describe "find" do
@@ -22,7 +20,7 @@ describe "Puppet::Resource::Ral" do
 
       require 'puppet/type/user'
       Puppet::Type::User.expects(:instances).returns([ wrong_instance, my_instance, wrong_instance ])
-      Puppet::Resource::Ral.new.find(@request).should == my_resource
+      expect(Puppet::Resource::Ral.new.find(@request)).to eq(my_resource)
     end
 
     it "should produce Puppet::Error instead of ArgumentError" do
@@ -42,7 +40,7 @@ describe "Puppet::Resource::Ral" do
 
       result = Puppet::Resource::Ral.new.find(@request)
 
-      result.should == root_resource
+      expect(result).to eq(root_resource)
     end
   end
 
@@ -57,7 +55,7 @@ describe "Puppet::Resource::Ral" do
 
       require 'puppet/type/user'
       Puppet::Type::User.expects(:instances).returns([ my_instance ])
-      Puppet::Resource::Ral.new.search(@request).should == [my_resource]
+      expect(Puppet::Resource::Ral.new.search(@request)).to eq([my_resource])
     end
 
     it "should filter results by name if there's a name in the key" do
@@ -76,7 +74,7 @@ describe "Puppet::Resource::Ral" do
 
       require 'puppet/type/user'
       Puppet::Type::User.expects(:instances).returns([ my_instance, wrong_instance ])
-      Puppet::Resource::Ral.new.search(@request).should == [my_resource]
+      expect(Puppet::Resource::Ral.new.search(@request)).to eq([my_resource])
     end
 
     it "should filter results by query parameters" do
@@ -95,7 +93,7 @@ describe "Puppet::Resource::Ral" do
 
       require 'puppet/type/user'
       Puppet::Type::User.expects(:instances).returns([ my_instance, wrong_instance ])
-      Puppet::Resource::Ral.new.search(@request).should == [my_resource]
+      expect(Puppet::Resource::Ral.new.search(@request)).to eq([my_resource])
     end
 
     it "should return sorted results" do
@@ -114,34 +112,20 @@ describe "Puppet::Resource::Ral" do
 
       require 'puppet/type/user'
       Puppet::Type::User.expects(:instances).returns([ b_instance, a_instance ])
-      Puppet::Resource::Ral.new.search(@request).should == [a_resource, b_resource]
+      expect(Puppet::Resource::Ral.new.search(@request)).to eq([a_resource, b_resource])
     end
   end
 
   describe "save" do
-    before do
-      @rebuilt_res = stub 'rebuilt instance'
-      @ral_res     = stub 'ral resource', :to_resource => @rebuilt_res
-      @instance    = stub 'instance', :to_ral => @ral_res
-      @request     = stub 'request',  :key => "user/", :instance => @instance
-      @catalog     = stub 'catalog'
-      @report      = stub 'report'
-      @transaction = stub 'transaction', :report => @report
+    it "returns a report covering the application of the given resource to the system" do
+      resource = Puppet::Resource.new(:notify, "the title")
+      ral = Puppet::Resource::Ral.new
 
-      Puppet::Resource::Catalog.stubs(:new).returns(@catalog)
-      @catalog.stubs(:apply).returns(@transaction)
-      @catalog.stubs(:add_resource)
-    end
+      applied_resource, report = ral.save(Puppet::Indirector::Request.new(:ral, :save, 'testing', resource, :environment => Puppet::Node::Environment.remote(:testing)))
 
-    it "should apply a new catalog with a ral object in it" do
-      Puppet::Resource::Catalog.expects(:new).returns(@catalog)
-      @catalog.expects(:add_resource).with(@ral_res)
-      @catalog.expects(:apply).returns(@transaction)
-      Puppet::Resource::Ral.new.save(@request).should
-    end
-
-    it "should return a regular resource that used to be the ral resource" do
-      Puppet::Resource::Ral.new.save(@request).should == [@rebuilt_res, @report]
+      expect(applied_resource.title).to eq("the title")
+      expect(report.environment).to eq("testing")
+      expect(report.resource_statuses["Notify[the title]"].changed).to eq(true)
     end
   end
 end

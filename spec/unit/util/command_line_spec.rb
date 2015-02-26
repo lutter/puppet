@@ -11,57 +11,50 @@ describe Puppet::Util::CommandLine do
     it "should pull off the first argument if it looks like a subcommand" do
       command_line = Puppet::Util::CommandLine.new("puppet", %w{ client --help whatever.pp })
 
-      command_line.subcommand_name.should == "client"
-      command_line.args.should            == %w{ --help whatever.pp }
+      expect(command_line.subcommand_name).to eq("client")
+      expect(command_line.args).to            eq(%w{ --help whatever.pp })
     end
 
     it "should return nil if the first argument looks like a .pp file" do
       command_line = Puppet::Util::CommandLine.new("puppet", %w{ whatever.pp })
 
-      command_line.subcommand_name.should == nil
-      command_line.args.should            == %w{ whatever.pp }
-    end
-
-    it "should return nil if the first argument looks like a .rb file" do
-      command_line = Puppet::Util::CommandLine.new("puppet", %w{ whatever.rb })
-
-      command_line.subcommand_name.should == nil
-      command_line.args.should            == %w{ whatever.rb }
+      expect(command_line.subcommand_name).to eq(nil)
+      expect(command_line.args).to            eq(%w{ whatever.pp })
     end
 
     it "should return nil if the first argument looks like a flag" do
       command_line = Puppet::Util::CommandLine.new("puppet", %w{ --debug })
 
-      command_line.subcommand_name.should == nil
-      command_line.args.should            == %w{ --debug }
+      expect(command_line.subcommand_name).to eq(nil)
+      expect(command_line.args).to            eq(%w{ --debug })
     end
 
     it "should return nil if the first argument is -" do
       command_line = Puppet::Util::CommandLine.new("puppet", %w{ - })
 
-      command_line.subcommand_name.should == nil
-      command_line.args.should            == %w{ - }
+      expect(command_line.subcommand_name).to eq(nil)
+      expect(command_line.args).to            eq(%w{ - })
     end
 
     it "should return nil if the first argument is --help" do
       command_line = Puppet::Util::CommandLine.new("puppet", %w{ --help })
 
-      command_line.subcommand_name.should == nil
+      expect(command_line.subcommand_name).to eq(nil)
     end
 
 
     it "should return nil if there are no arguments" do
       command_line = Puppet::Util::CommandLine.new("puppet", [])
 
-      command_line.subcommand_name.should == nil
-      command_line.args.should            == []
+      expect(command_line.subcommand_name).to eq(nil)
+      expect(command_line.args).to            eq([])
     end
 
     it "should pick up changes to the array of arguments" do
       args = %w{subcommand}
       command_line = Puppet::Util::CommandLine.new("puppet", args)
       args[0] = 'different_subcommand'
-      command_line.subcommand_name.should == 'different_subcommand'
+      expect(command_line.subcommand_name).to eq('different_subcommand')
     end
   end
 
@@ -70,7 +63,7 @@ describe Puppet::Util::CommandLine do
       it "should print the version and exit if #{arg} is given" do
         expect do
           described_class.new("puppet", [arg]).execute
-        end.to have_printed(/^#{Puppet.version}$/)
+        end.to have_printed(/^#{Regexp.escape(Puppet.version)}$/)
       end
     end
   end
@@ -78,7 +71,7 @@ describe Puppet::Util::CommandLine do
   describe "when dealing with puppet commands" do
     it "should return the executable name if it is not puppet" do
       command_line = Puppet::Util::CommandLine.new("puppetmasterd", [])
-      command_line.subcommand_name.should == "puppetmasterd"
+      expect(command_line.subcommand_name).to eq("puppetmasterd")
     end
 
     describe "when the subcommand is not implemented" do
@@ -125,26 +118,9 @@ describe Puppet::Util::CommandLine do
 
             expect {
               commandline.execute
-            }.to have_printed(/^#{Puppet.version}$/).and_exit_with(1)
+            }.to have_printed(%r[^#{Regexp.escape(Puppet.version)}$]).and_exit_with(1)
           end
         end
-      end
-    end
-
-    describe 'when loading commands' do
-      it "should deprecate the available_subcommands instance method" do
-        Puppet::Application.expects(:available_application_names)
-        Puppet.expects(:deprecation_warning).with("Puppet::Util::CommandLine#available_subcommands is deprecated; please use Puppet::Application.available_application_names instead.")
-
-        command_line = Puppet::Util::CommandLine.new("foo", %w{ client --help whatever.pp })
-        command_line.available_subcommands
-      end
-
-      it "should deprecate the available_subcommands class method" do
-        Puppet::Application.expects(:available_application_names)
-        Puppet.expects(:deprecation_warning).with("Puppet::Util::CommandLine.available_subcommands is deprecated; please use Puppet::Application.available_application_names instead.")
-
-        Puppet::Util::CommandLine.available_subcommands
       end
     end
 

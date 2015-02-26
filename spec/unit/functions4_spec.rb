@@ -53,6 +53,18 @@ describe 'the 4x function api' do
     end.to raise_error(ArgumentError, 'Functions must be based on Puppet::Pops::Functions::Function. Got Object')
   end
 
+  it 'refuses to create functions with parameters that are not named with a symbol' do
+    expect do
+      Puppet::Functions.create_function('testing') do
+        dispatch :test do
+          param 'Integer', 'not_symbol'
+        end
+        def test(x)
+        end
+      end
+    end.to raise_error(ArgumentError, /Parameter name argument must be a Symbol/)
+  end
+
   it 'a function without arguments can be defined and called without dispatch declaration' do
     f = create_noargs_function_class()
     func = f.new(:closure_scope, :loader)
@@ -73,7 +85,7 @@ actual:
     f = create_min_function_class()
     # TODO: Bogus parameters, not yet used
     func = f.new(:closure_scope, :loader)
-    expect(func.is_a?(Puppet::Functions::Function)).to be_true
+    expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
     expect(func.call({}, 10,20)).to eql(10)
   end
 
@@ -81,12 +93,8 @@ actual:
     f = create_min_function_class()
     # TODO: Bogus parameters, not yet used
     func = f.new(:closure_scope, :loader)
-    expect(func.is_a?(Puppet::Functions::Function)).to be_true
-    signature = if RUBY_VERSION =~ /^1\.8/
-      'Any{2}'
-    else
-      'Any x, Any y'
-    end
+    expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
+    signature = 'Any x, Any y'
     expect do
       func.call({}, 10)
     end.to raise_error(ArgumentError, "function 'min' called with mis-matched arguments
@@ -100,12 +108,8 @@ actual:
     f = create_min_function_class()
     # TODO: Bogus parameters, not yet used
     func = f.new(:closure_scope, :loader)
-    expect(func.is_a?(Puppet::Functions::Function)).to be_true
-    signature = if RUBY_VERSION =~ /^1\.8/
-      'Any{2}'
-    else
-      'Any x, Any y'
-    end
+    expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
+    signature = 'Any x, Any y'
     expect do
       func.call({}, 10, 10, 10)
     end.to raise_error(ArgumentError, Regexp.new(Regexp.escape(
@@ -145,7 +149,7 @@ actual:
       f = create_min_function_class_using_dispatch()
       # TODO: Bogus parameters, not yet used
       func = f.new(:closure_scope, :loader)
-      expect(func.is_a?(Puppet::Functions::Function)).to be_true
+      expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
       expect do
         func.call({}, 10, 10, 10)
       end.to raise_error(ArgumentError, Regexp.new(Regexp.escape(
@@ -160,12 +164,8 @@ actual:
       f = create_function_with_optionals_and_varargs()
       # TODO: Bogus parameters, not yet used
       func = f.new(:closure_scope, :loader)
-      expect(func.is_a?(Puppet::Functions::Function)).to be_true
-      signature = if RUBY_VERSION =~ /^1\.8/
-        'Any{2,}'
-      else
-        'Any x, Any y, Any a?, Any b?, Any c{0,}'
-      end
+      expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
+      signature = 'Any x, Any y, Any a?, Any b?, Any c{0,}'
       expect do
         func.call({}, 10)
       end.to raise_error(ArgumentError,
@@ -180,7 +180,7 @@ actual:
       f = create_function_with_optionals_and_varargs_via_dispatch()
       # TODO: Bogus parameters, not yet used
       func = f.new(:closure_scope, :loader)
-      expect(func.is_a?(Puppet::Functions::Function)).to be_true
+      expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
       expect do
         func.call({}, 10)
       end.to raise_error(ArgumentError,
@@ -202,7 +202,7 @@ actual:
       f = create_min_function_class_disptaching_to_two_methods()
       # TODO: Bogus parameters, not yet used
       func = f.new(:closure_scope, :loader)
-      expect(func.is_a?(Puppet::Functions::Function)).to be_true
+      expect(func.is_a?(Puppet::Functions::Function)).to be_truthy
       expect do
         func.call({}, 10, 10, 10)
       end.to raise_error(ArgumentError,
@@ -306,6 +306,13 @@ actual:
         the_function = create_function_with_optional_block_all_defaults().new(:closure_scope, :loader)
         expect(the_function.call({}, 10)).to be_nil
       end
+
+      it 'such that, a scope can be injected and a block can be used' do
+        # use a Function as callable
+        the_callable = create_min_function_class().new(:closure_scope, :loader)
+        the_function = create_function_with_scope_required_block_all_defaults().new(:closure_scope, :loader)
+        expect(the_function.call({}, 10, the_callable)).to be(the_callable)
+      end
     end
 
     context 'provides signature information' do
@@ -314,14 +321,14 @@ actual:
         signatures = fc.signatures
         expect(signatures.size).to eql(1)
         signature = signatures[0]
-        expect(signature.last_captures_rest?).to be_true
+        expect(signature.last_captures_rest?).to be_truthy
       end
 
       it 'about optional and required parameters' do
         fc = create_function_with_optionals_and_varargs
         signature = fc.signatures[0]
-        expect(signature.args_range).to eql( [2, Puppet::Pops::Types::INFINITY ] )
-        expect(signature.infinity?(signature.args_range[1])).to be_true
+        expect(signature.args_range).to eql( [2, Float::INFINITY ] )
+        expect(signature.infinity?(signature.args_range[1])).to be_truthy
       end
 
       it 'about block not being allowed' do
@@ -351,41 +358,38 @@ actual:
         expect(signature.type.class).to be(Puppet::Pops::Types::PCallableType)
       end
 
-      # conditional on Ruby 1.8.7 which does not do parameter introspection
-      if Method.method_defined?(:parameters)
-        it 'about parameter names obtained from ruby introspection' do
-          fc = create_min_function_class
-          signature = fc.signatures[0]
-          expect(signature.parameter_names).to eql(['x', 'y'])
-        end
+      it 'about parameter names obtained from ruby introspection' do
+        fc = create_min_function_class
+        signature = fc.signatures[0]
+        expect(signature.parameter_names).to eql(['x', 'y'])
       end
 
       it 'about parameter names specified with dispatch' do
         fc = create_min_function_class_using_dispatch
         signature = fc.signatures[0]
-        expect(signature.parameter_names).to eql(['a', 'b'])
+        expect(signature.parameter_names).to eql([:a, :b])
       end
 
       it 'about block_name when it is *not* given in the definition' do
         # neither type, nor name
         fc = create_function_with_required_block_all_defaults
         signature = fc.signatures[0]
-        expect(signature.block_name).to eql('block')
+        expect(signature.block_name).to eql(:block)
         # no name given, only type
         fc = create_function_with_required_block_given_type
         signature = fc.signatures[0]
-        expect(signature.block_name).to eql('block')
+        expect(signature.block_name).to eql(:block)
       end
 
       it 'about block_name when it *is* given in the definition' do
         # neither type, nor name
         fc = create_function_with_required_block_default_type
         signature = fc.signatures[0]
-        expect(signature.block_name).to eql('the_block')
+        expect(signature.block_name).to eql(:the_block)
         # no name given, only type
         fc = create_function_with_required_block_fully_specified
         signature = fc.signatures[0]
-        expect(signature.block_name).to eql('the_block')
+        expect(signature.block_name).to eql(:the_block)
       end
     end
 
@@ -399,7 +403,7 @@ actual:
       end
 
       it 'such that, other functions are callable by name' do
-        fc = Puppet::Functions.create_function(:test) do
+        fc = Puppet::Functions.create_function('test') do
           def test()
             # Call a function available in the puppet system
             call_function('assert_type', 'Integer', 10)
@@ -411,7 +415,7 @@ actual:
       end
 
       it 'such that, calling a non existing function raises an error' do
-        fc = Puppet::Functions.create_function(:test) do
+        fc = Puppet::Functions.create_function('test') do
           def test()
             # Call a function not available in the puppet system
             call_function('no_such_function', 'Integer', 'hello')
@@ -434,13 +438,6 @@ actual:
 
       before(:each) do
         Puppet[:strict_variables] = true
-
-        # These must be set since the is 3x logic that triggers on these even if the tests are explicit
-        # about selection of parser and evaluator
-        #
-        Puppet[:parser] = 'future'
-        # Puppetx cannot be loaded until the correct parser has been set (injector is turned off otherwise)
-        require 'puppetx'
       end
 
       let(:parser) {  Puppet::Pops::Parser::EvaluatingParser.new }
@@ -451,13 +448,13 @@ actual:
         # construct ruby function to call
         fc = Puppet::Functions.create_function('testing::test') do
           dispatch :test do
-            param 'Integer', 'x'
+            param 'Integer', :x
             # block called 'the_block', and using "all_callables"
             required_block_param #(all_callables(), 'the_block')
           end
           def test(x, block)
             # call the block with x
-            block.call(closure_scope, x)
+            block.call(x)
           end
         end
         # add the function to the loader (as if it had been loaded from somewhere)
@@ -509,8 +506,8 @@ actual:
   def create_min_function_class_using_dispatch
     f = Puppet::Functions.create_function('min') do
         dispatch :min do
-          param 'Numeric', 'a'
-          param 'Numeric', 'b'
+          param 'Numeric', :a
+          param 'Numeric', :b
         end
       def min(x,y)
         x <= y ? x : y
@@ -521,13 +518,13 @@ actual:
   def create_min_function_class_disptaching_to_two_methods
     f = Puppet::Functions.create_function('min') do
       dispatch :min do
-        param 'Numeric', 'a'
-        param 'Numeric', 'b'
+        param 'Numeric', :a
+        param 'Numeric', :b
       end
 
       dispatch :min_s do
-        param 'String', 's1'
-        param 'String', 's2'
+        param 'String', :s1
+        param 'String', :s2
       end
 
       def min(x,y)
@@ -552,11 +549,11 @@ actual:
   def create_function_with_optionals_and_varargs_via_dispatch
     f = Puppet::Functions.create_function('min') do
       dispatch :min do
-        param 'Numeric', 'x'
-        param 'Numeric', 'y'
-        param 'Numeric', 'a'
-        param 'Numeric', 'b'
-        param 'Numeric', 'c'
+        param 'Numeric', :x
+        param 'Numeric', :y
+        param 'Numeric', :a
+        param 'Numeric', :b
+        param 'Numeric', :c
         arg_count 2, :default
       end
       def min(x,y,a=1, b=1, *c)
@@ -584,10 +581,10 @@ actual:
       attr_injected_producer Puppet::Pops::Types::TypeFactory.integer(), :serial, "an_int"
 
       dispatch :test do
-        injected_param Puppet::Pops::Types::TypeFactory.string, 'x', 'a_string'
-        injected_producer_param Puppet::Pops::Types::TypeFactory.integer, 'y', 'an_int'
-        param 'Scalar', 'a'
-        param 'Scalar', 'b'
+        injected_param Puppet::Pops::Types::TypeFactory.string, :x, 'a_string'
+        injected_producer_param Puppet::Pops::Types::TypeFactory.integer, :y, 'an_int'
+        param 'Scalar', :a
+        param 'Scalar', :b
       end
 
       def test(x,y,a,b)
@@ -600,7 +597,7 @@ actual:
   def create_function_with_required_block_all_defaults
     f = Puppet::Functions.create_function('test') do
       dispatch :test do
-        param 'Integer', 'x'
+        param 'Integer', :x
         # use defaults, any callable, name is 'block'
         required_block_param
       end
@@ -611,12 +608,27 @@ actual:
     end
   end
 
+  def create_function_with_scope_required_block_all_defaults
+    f = Puppet::Functions.create_function('test', Puppet::Functions::InternalFunction) do
+      dispatch :test do
+        scope_param
+        param 'Integer', :x
+        # use defaults, any callable, name is 'block'
+        required_block_param
+      end
+      def test(scope, x, block)
+        # returns the block to make it easy to test what it got when called
+        block
+      end
+    end
+  end
+
   def create_function_with_required_block_default_type
     f = Puppet::Functions.create_function('test') do
       dispatch :test do
-        param 'Integer', 'x'
+        param 'Integer', :x
         # use defaults, any callable, name is 'block'
-        required_block_param 'the_block'
+        required_block_param :the_block
       end
       def test(x, block)
         # returns the block to make it easy to test what it got when called
@@ -628,7 +640,7 @@ actual:
   def create_function_with_required_block_given_type
     f = Puppet::Functions.create_function('test') do
       dispatch :test do
-        param 'Integer', 'x'
+        param 'Integer', :x
         required_block_param
       end
       def test(x, block)
@@ -641,9 +653,9 @@ actual:
   def create_function_with_required_block_fully_specified
     f = Puppet::Functions.create_function('test') do
       dispatch :test do
-        param 'Integer', 'x'
+        param 'Integer', :x
         # use defaults, any callable, name is 'block'
-        required_block_param('Callable', 'the_block')
+        required_block_param('Callable', :the_block)
       end
       def test(x, block)
         # returns the block to make it easy to test what it got when called
@@ -655,7 +667,7 @@ actual:
   def create_function_with_optional_block_all_defaults
     f = Puppet::Functions.create_function('test') do
       dispatch :test do
-        param 'Integer', 'x'
+        param 'Integer', :x
         # use defaults, any callable, name is 'block'
         optional_block_param
       end

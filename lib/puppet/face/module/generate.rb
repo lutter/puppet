@@ -26,7 +26,7 @@ Puppet::Face.define(:module, '1.0.0') do
       Who wrote this module?  [puppetlabs]
       -->
 
-      What license does this module code fall under?  [Apache 2.0]
+      What license does this module code fall under?  [Apache-2.0]
       -->
 
       How would you describe this module in a single sentence?
@@ -47,7 +47,7 @@ Puppet::Face.define(:module, '1.0.0') do
         "version": "0.1.0",
         "author": "puppetlabs",
         "summary": null,
-        "license": "Apache 2.0",
+        "license": "Apache-2.0",
         "source": "",
         "project_page": null,
         "issues_url": null,
@@ -204,7 +204,7 @@ module Puppet::ModuleTool::Generate
 
   def destination(metadata)
     return @dest if defined? @dest
-    @dest = Pathname.pwd + metadata.dashed_name
+    @dest = Pathname.pwd + metadata.name
     raise ArgumentError, "#{@dest} already exists." if @dest.exist?
     return @dest
   end

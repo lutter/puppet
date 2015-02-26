@@ -2,22 +2,39 @@ test_name "Agent should use agent environment if there is no enc-specified envir
 
 testdir = create_tmpdir_for_user master, 'use_agent_env'
 
-create_remote_file(master, "#{testdir}/different.pp", 'notify { "production environment": }')
-create_remote_file(master, "#{testdir}/more_different.pp", 'notify { "more_different_string": }')
-
-on master, "chown -R #{master['user']}:#{master['group']} #{testdir}"
-on master, "chmod -R g+rwX #{testdir}"
+apply_manifest_on(master, <<-MANIFEST, :catch_failures => true)
+  File {
+    ensure => directory,
+    mode => "0770",
+    owner => #{master.puppet['user']},
+    group => #{master.puppet['group']},
+  }
+  file {
+    '#{testdir}/environments':;
+    '#{testdir}/environments/production':;
+    '#{testdir}/environments/production/manifests':;
+    '#{testdir}/environments/more_different/':;
+    '#{testdir}/environments/more_different/manifests':;
+  }
+  file { '#{testdir}/environments/production/manifests/site.pp':
+    ensure => file,
+    mode => "0640",
+    content => 'notify { "production environment": }',
+  }
+  file { '#{testdir}/environments/more_different/manifests/more_different.pp':
+    ensure => file,
+    mode => "0640",
+    content => 'notify { "more_different_string": }',
+  }
+MANIFEST
 
 master_opts = {
   'main' => {
-    'manifest' => "#{testdir}/site.pp"
+    'environmentpath' => "#{testdir}/environments",
   },
-  'production' => {
-    'manifest' => "#{testdir}/different.pp"
+  'master' => {
+    'node_terminus' => 'plain'
   },
-  'more_different' => {
-    'manifest' => "#{testdir}/more_different.pp"
-  }
 }
 
 with_puppet_running_on master, master_opts, testdir do

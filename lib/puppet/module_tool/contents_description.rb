@@ -42,9 +42,9 @@ module Puppet::ModuleTool
           end
         end
 
-        type_names.each do |type_name|
-          if type = Puppet::Type.type(type_name.to_sym)
-            type_hash = {:name => type_name, :doc => type.doc}
+        type_names.each do |name|
+          if type = Puppet::Type.type(name.to_sym)
+            type_hash = {:name => name, :doc => type.doc}
             type_hash[:properties] = attr_doc(type, :property)
             type_hash[:parameters] = attr_doc(type, :param)
             if type.providers.size > 0
@@ -52,7 +52,7 @@ module Puppet::ModuleTool
             end
             @data << type_hash
           else
-            Puppet.warning "Could not find/load type: #{type_name}"
+            Puppet.warning "Could not find/load type: #{name}"
           end
         end
       end
@@ -62,23 +62,27 @@ module Puppet::ModuleTool
     # Return an array of hashes representing this +type+'s attrs of +kind+
     # (e.g. :param or :property), each containing :name and :doc.
     def attr_doc(type, kind)
-      [].tap do |attrs|
-        type.allattrs.each do |name|
-          if type.attrtype(name) == kind && name != :provider
-            attrs.push(:name => name, :doc => type.attrclass(name).doc)
-          end
+      attrs = []
+
+      type.allattrs.each do |name|
+        if type.attrtype(name) == kind && name != :provider
+          attrs.push(:name => name, :doc => type.attrclass(name).doc)
         end
       end
+
+      attrs
     end
 
     # Return an array of hashes representing this +type+'s providers, each
     # containing :name and :doc.
     def provider_doc(type)
-      [].tap do |providers|
-        type.providers.sort.each do |prov|
-          providers.push(:name => prov, :doc => type.provider(prov).doc)
-        end
+      providers = []
+
+      type.providers.sort.each do |prov|
+        providers.push(:name => prov, :doc => type.provider(prov).doc)
       end
+
+      providers
     end
   end
 end

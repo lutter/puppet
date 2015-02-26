@@ -298,8 +298,11 @@ class Puppet::Graph::SimpleGraph
     @downstream_from.clear
     add_vertex(e.source)
     add_vertex(e.target)
-    @in_to[   e.target][e.source] ||= []; @in_to[   e.target][e.source] |= [e]
-    @out_from[e.source][e.target] ||= []; @out_from[e.source][e.target] |= [e]
+    # Avoid multiple lookups here. This code is performance critical
+    arr = (@in_to[e.target][e.source] ||= [])
+    arr << e unless arr.include?(e)
+    arr = (@out_from[e.source][e.target] ||= [])
+    arr << e unless arr.include?(e)
   end
 
   def add_relationship(source, target, label = nil)
@@ -435,19 +438,19 @@ class Puppet::Graph::SimpleGraph
     graph      = (directed? ? DOT::DOTDigraph : DOT::DOTSubgraph).new(params)
     edge_klass = directed? ? DOT::DOTDirectedEdge : DOT::DOTEdge
     vertices.each do |v|
-      name = v.to_s
+      name = v.ref
       params = {'name'     => '"'+name+'"',
         'fontsize' => fontsize,
         'label'    => name}
-      v_label = v.to_s
+      v_label = v.ref
       params.merge!(v_label) if v_label and v_label.kind_of? Hash
       graph << DOT::DOTNode.new(params)
     end
     edges.each do |e|
-      params = {'from'     => '"'+ e.source.to_s + '"',
-        'to'       => '"'+ e.target.to_s + '"',
+      params = {'from'     => '"'+ e.source.ref + '"',
+        'to'       => '"'+ e.target.ref + '"',
         'fontsize' => fontsize }
-      e_label = e.to_s
+      e_label = e.ref
       params.merge!(e_label) if e_label and e_label.kind_of? Hash
       graph << edge_klass.new(params)
     end
@@ -456,13 +459,6 @@ class Puppet::Graph::SimpleGraph
 
   # Output the dot format as a string
   def to_dot (params={}) to_dot_graph(params).to_s; end
-
-  # Call +dotty+ for the graph which is written to the file 'graph.dot'
-  # in the # current directory.
-  def dotty (params = {}, dotfile = 'graph.dot')
-    File.open(dotfile, 'w') {|f| f << to_dot(params) }
-    system('dotty', dotfile)
-  end
 
   # Produce the graph files if requested.
   def write_graph(name)
@@ -499,7 +495,7 @@ class Puppet::Graph::SimpleGraph
     end
   end
 
-  # instance_variable_get is used by Object.to_zaml to get instance
+  # instance_variable_get is used by YAML.dump to get instance
   # variables.  Override it so that we can simulate the presence of
   # instance variables @edges and @vertices for serialization.
   def instance_variable_get(v)

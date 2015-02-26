@@ -14,7 +14,7 @@ describe Puppet::Util::Logging do
 
   Puppet::Util::Log.eachlevel do |level|
     it "should have a method for sending '#{level}' logs" do
-      @logger.should respond_to(level)
+      expect(@logger).to respond_to(level)
     end
   end
 
@@ -186,7 +186,7 @@ describe Puppet::Util::Logging do
       exc1 = Puppet::Error.new("third", exc2)
       exc1.set_backtrace(["7.rb:31:in `e'","8.rb:22:in `f'","9.rb:9"])
       # whoa ugly
-      @logger.format_exception(exc1).should =~ /third
+      expect(@logger.format_exception(exc1)).to match(/third
 .*7\.rb:31:in `e'
 .*8\.rb:22:in `f'
 .*9\.rb:9
@@ -199,7 +199,124 @@ Wrapped exception:
 original
 .*1\.rb:4:in `a'
 .*2\.rb:2:in `b'
-.*3\.rb:1/
+.*3\.rb:1/)
+    end
+  end
+
+  describe 'when Facter' do
+    after :each do
+      # Unstub these calls as there is global code run after
+      # each spec that may reset the log level to debug
+      Facter.unstub(:respond_to?)
+      Facter.unstub(:debugging)
+    end
+
+    describe 'does not support debugging' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:debugging).returns false
+        Facter.stubs(:debugging).never
+      end
+
+      it 'does not enable Facter debugging for debug level' do
+        Puppet::Util::Log.level = :debug
+      end
+
+      it 'does not enable Facter debugging non-debug level' do
+        Puppet::Util::Log.level = :info
+      end
+    end
+
+    describe 'does support debugging' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:debugging).returns true
+      end
+
+      it 'enables Facter debugging when debug level' do
+        Facter.stubs(:debugging).with(true)
+        Puppet::Util::Log.level = :debug
+      end
+
+      it 'disables Facter debugging when not debug level' do
+        Facter.stubs(:debugging).with(false)
+        Puppet::Util::Log.level = :info
+      end
+    end
+
+    describe 'does not support trace' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:trace).returns false
+        Facter.stubs(:trace).never
+      end
+
+      it 'does not enable Facter trace when enabled' do
+        Puppet[:trace] = true
+      end
+
+      it 'does not enable Facter trace when disabled' do
+        Puppet[:trace] = false
+      end
+    end
+
+    describe 'does support trace' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:trace).returns true
+      end
+
+      it 'enables Facter trace when enabled' do
+        Facter.stubs(:trace).with(true)
+        Puppet[:trace] = true
+      end
+
+      it 'disables Facter trace when disabled' do
+        Facter.stubs(:trace).with(false)
+        Puppet[:trace] = false
+      end
+    end
+
+    describe 'does not support on_message' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:on_message).returns false
+        Facter.stubs(:on_message).never
+      end
+
+      it 'does not call Facter.on_message' do
+        expect(Puppet::Util::Logging::setup_facter_logging!).to be_falsey
+      end
+    end
+
+    describe 'does support on_message' do
+      before :each do
+        Facter.stubs(:respond_to?).with(:on_message).returns true
+      end
+
+      def setup(level, message)
+        Facter.stubs(:on_message).yields level, message
+
+        # Transform from Facter level to Puppet level
+        case level
+        when :trace
+          level = :debug
+        when :warn
+          level = :warning
+        when :error
+          level = :err
+        when :fatal
+          level = :crit
+        end
+
+        Puppet::Util::Log.stubs(:create).with do |options|
+          expect(options[:level]).to eq(level)
+          expect(options[:message]).to eq(message)
+          expect(options[:source]).to eq('Facter')
+        end.once
+      end
+
+      [:trace, :debug, :info, :warn, :error, :fatal].each do |level|
+        it "calls Facter.on_message and handles #{level} messages" do
+          setup(level, "#{level} message")
+          expect(Puppet::Util::Logging::setup_facter_logging!).to be_truthy
+        end
+      end
     end
   end
 end

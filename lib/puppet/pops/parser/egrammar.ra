@@ -22,6 +22,7 @@ token RENDER_STRING RENDER_EXPR EPP_START EPP_END EPP_END_TRIM
 token FUNCTION
 token PRIVATE ATTR TYPE
 token LOW
+token APPLICATION PRODUCES CONSUMES
 
 prechigh
   left  HIGH
@@ -86,7 +87,7 @@ syntactic_statements
 #
 syntactic_statement
   : assignment                             =LOW { result = val[0] }
-  | syntactic_statement COMMA assignment   =LOW { result = aryfy(val[0]).push val[2] }
+  | syntactic_statement COMMA assignment   =LOW { result = aryfy(val[0]).push(val[1]).push(val[2]) }
 
 # Assignment (is right recursive since assignment is right associative)
 assignment
@@ -236,6 +237,9 @@ primary_expression
   | if_expression
   | unless_expression
   | definition_expression
+  # @todo lutter 2014-09-03: application declarations must be at the toplevel
+  # in a manifest
+  | application_expression
   | hostclass_expression
   | node_definition_expression
   | epp_render_expression
@@ -444,7 +448,6 @@ collection_expression
 #
 attribute_operations
   :                                                { result = [] }
-  | TIMES FARROW expression                        { result = [tmp = Factory.ATTRIBUTES_OP(val[2])] ; loc tmp, val[0], val[2] }
   | attribute_operation                            { result = [val[0]] }
   | attribute_operations COMMA attribute_operation { result = val[0].push(val[2]) }
 
@@ -469,20 +472,59 @@ attribute_operations
         result = Factory.ATTRIBUTE_OP(val[0][:value], :'+>', val[2])
         loc result, val[0], val[2]
       }
+  | TIMES FARROW expression {
+      result = Factory.ATTRIBUTES_OP(val[2]) ; loc result, val[0], val[2]
+   }
 
 #---DEFINE
 #
 # Produces Model::Definition
 #
 definition_expression
-  : DEFINE classname parameter_list LBRACE opt_statements RBRACE {
-      result = add_definition(Factory.DEFINITION(classname(val[1][:value]), val[2], val[4]))
-      loc result, val[0], val[5]
+  : DEFINE classname parameter_list capabilities LBRACE opt_statements RBRACE {
+      result = add_definition(Factory.DEFINITION(classname(val[1][:value]), val[2], val[3], val[5]))
+      loc result, val[0], val[6]
       # New lexer does not keep track of this, this is done in validation
       if @lexer.respond_to?(:'indefine=')
         @lexer.indefine = false
       end
     }
+
+# @todo lutter 2014-09-03: this sucks a little as you have to write
+#   'produces foo { .. } produces bar { .. }'
+# and should become
+#   'produces foo { .. }, bar { .. }'
+capabilities
+  : nil {
+      result = { produces: [], consumes: [] }
+    }
+  | capabilities capability {
+      result = val[0]
+      val[1].keys.each { |cap| result[cap] << val[1][cap] }
+    }
+
+capability
+  # @todo lutter 2014-11-12: this is a simplified version of the resource
+  # production 'RESOURCE TITLED 3x and 4x'. Might need some more work to
+  # get it exactly right.
+  : PRODUCES expression LBRACE expression COLON attribute_operations RBRACE {
+      body = [Factory.RESOURCE_BODY(val[3], val[5])]
+      rsrc = Factory.RESOURCE(val[1], body)
+      loc rsrc, val[0], val[6]
+      result = { produces: rsrc }
+    }
+  # @todo lutter 2014-11-12: typed_parameter allows splat_parameter which
+  # we do not want here. Nor do we want assigning a default value
+  | CONSUMES typed_parameter {
+    result = { consumes: val[1] }
+  }
+
+#---APPLICATION
+application_expression
+  : APPLICATION classname parameter_list LBRACE opt_statements RBRACE {
+    result = add_definition(Factory.APPLICATION(classname(val[1][:value]), val[2], val[4]))
+    loc result, val[0], val[5]
+  }
 
 #---HOSTCLASS
 #
@@ -633,14 +675,14 @@ reserved_word
 
 array
   : LISTSTART assignments endcomma  RBRACK { result = Factory.LIST(val[1]); loc result, val[0], val[3] }
-  | LISTSTART                       RBRACK { result = Factory.literal([]) ; loc result, val[0] }
+  | LISTSTART                       RBRACK { result = Factory.literal([]) ; loc result, val[0], val[1] }
   | LBRACK    assignments endcomma  RBRACK { result = Factory.LIST(val[1]); loc result, val[0], val[3] }
-  | LBRACK                          RBRACK { result = Factory.literal([]) ; loc result, val[0] }
+  | LBRACK                          RBRACK { result = Factory.literal([]) ; loc result, val[0], val[1] }
 
 hash
   : LBRACE hashpairs RBRACE       { result = Factory.HASH(val[1]); loc result, val[0], val[2] }
   | LBRACE hashpairs COMMA RBRACE { result = Factory.HASH(val[1]); loc result, val[0], val[3] }
-  | LBRACE RBRACE                 { result = Factory.literal({}) ; loc result, val[0], val[3] }
+  | LBRACE RBRACE                 { result = Factory.literal({}) ; loc result, val[0], val[1] }
 
   hashpairs
     : hashpair                 { result = [val[0]] }
@@ -731,6 +773,9 @@ keyword
   | ATTR
   | FUNCTION
   | PRIVATE
+  | APPLICATION
+  | PRODUCES
+  | CONSUMES
 
 nil
   : { result = nil}

@@ -1,7 +1,6 @@
 require 'puppet/node'
 require 'puppet/indirector'
 require 'puppet/transaction'
-require 'puppet/util/pson'
 require 'puppet/util/tagging'
 require 'puppet/graph'
 
@@ -20,7 +19,6 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   indirects :catalog, :terminus_setting => :catalog_terminus
 
   include Puppet::Util::Tagging
-  extend Puppet::Util::Pson
 
   # The host name this is a catalog for.
   attr_accessor :name
@@ -63,8 +61,14 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   end
 
   def title_key_for_ref( ref )
-    ref =~ /^([-\w:]+)\[(.*)\]$/m
-    [$1, $2]
+    s = ref.index('[')
+    e = ref.index(']')
+    if s && e && e > s
+      a = [ref[0, s], ref[s+1, e-s-1]]
+    else
+      a = [nil, nil]
+    end
+    return a
   end
 
   def add_resource(*resources)
@@ -107,8 +111,13 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   private :add_resource_to_graph
 
   def create_resource_aliases(resource)
-    if resource.respond_to?(:isomorphic?) and resource.isomorphic? and resource.name != resource.title
-      self.alias(resource, resource.uniqueness_key)
+    # Skip creating aliases and checking collisions for non-isomorphic resources.
+    return unless resource.respond_to?(:isomorphic?) and resource.isomorphic?
+
+    # Add an alias if the uniqueness key is valid and not the title, which has already been checked.
+    ukey = resource.uniqueness_key
+    if ukey.any? and ukey != [resource.title]
+      self.alias(resource, ukey)
     end
   end
   private :create_resource_aliases
@@ -350,12 +359,12 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
       edges.each do |edge_hash|
         edge = Puppet::Relationship.from_data_hash(edge_hash)
         unless source = result.resource(edge.source)
-          raise ArgumentError, "Could not intern from data: Could not find relationship source #{edge.source.inspect}"
+          raise ArgumentError, "Could not intern from data: Could not find relationship source #{edge.source.inspect} for #{edge.target.to_s}"
         end
         edge.source = source
 
         unless target = result.resource(edge.target)
-          raise ArgumentError, "Could not intern from data: Could not find relationship target #{edge.target.inspect}"
+          raise ArgumentError, "Could not intern from data: Could not find relationship target #{edge.target.inspect} for #{edge.source.to_s}"
         end
         edge.target = target
 
@@ -370,36 +379,16 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     result
   end
 
-  def self.from_pson(data)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(data)
-  end
-
   def to_data_hash
     {
       'tags'      => tags,
       'name'      => name,
       'version'   => version,
       'environment' => environment.to_s,
-      'resources' => @resources.collect { |v| @resource_table[v].to_pson_data_hash },
-      'edges'     => edges.   collect { |e| e.to_pson_data_hash },
+      'resources' => @resources.collect { |v| @resource_table[v].to_data_hash },
+      'edges'     => edges.   collect { |e| e.to_data_hash },
       'classes'   => classes
     }
-  end
-
-  PSON.register_document_type('Catalog',self)
-  def to_pson_data_hash
-    {
-      'document_type' => 'Catalog',
-      'data'       => to_data_hash,
-      'metadata' => {
-        'api_version' => 1
-        }
-    }
-  end
-
-  def to_pson(*args)
-    to_pson_data_hash.to_pson(*args)
   end
 
   # Convert our catalog into a RAL catalog.
@@ -416,7 +405,18 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   # If the block result is false, the resource will
   # be kept otherwise it will be skipped
   def filter(&block)
-    to_catalog :to_resource, &block
+    # to_catalog must take place in a context where current_environment is set to the same env as the
+    # environment set in the catalog (if it is set)
+    # See PUP-3755
+    if environment_instance
+      Puppet.override({:current_environment => environment_instance}) do
+        to_catalog :to_resource, &block
+      end
+    else
+      # If catalog has no environment_instance, hope that the caller has made sure the context has the
+      # correct current_environment
+      to_catalog :to_resource, &block
+    end
   end
 
   # Store the classes in the classfile.

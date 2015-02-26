@@ -2,7 +2,7 @@
 packaging_url: 'git://github.com/puppetlabs/packaging.git --branch=master'
 packaging_repo: 'packaging'
 default_cow: 'base-squeeze-i386.cow'
-cows: 'base-lucid-i386.cow base-precise-i386.cow base-squeeze-i386.cow base-stable-i386.cow base-testing-i386.cow base-trusty-i386.cow base-wheezy-i386.cow base-saucy-i386.cow'
+cows: 'base-lucid-i386.cow base-precise-i386.cow base-squeeze-i386.cow base-stable-i386.cow base-testing-i386.cow base-trusty-i386.cow base-wheezy-i386.cow'
 pbuild_conf: '/etc/pbuilderrc'
 packager: 'puppetlabs'
 gpg_name: 'info@puppetlabs.com'
@@ -14,6 +14,25 @@ yum_host: 'yum.puppetlabs.com'
 yum_repo_path: '/opt/repository/yum/'
 build_gem: TRUE
 build_dmg: TRUE
+msi_name: 'puppet-agent'
+build_msi:
+  puppet_for_the_win:
+    ref: '59031fc0783c70706d1faa774ce4c9cfd74e2965'
+    repo: 'git://github.com/puppetlabs/puppet_for_the_win.git'
+  facter:
+    ref: 'refs/tags/2.3.0'
+    repo: 'git://github.com/puppetlabs/facter.git'
+  hiera:
+    ref: 'refs/tags/1.3.4'
+    repo: 'git://github.com/puppetlabs/hiera.git'
+  mcollective:
+    ref: 'refs/tags/2.7.0'
+    repo: 'git://github.com/puppetlabs/marionette-collective.git'
+  sys:
+    ref:
+      x86: '57068e7b7c87288c51ff39d96c80cfb509a42091'
+      x64: '531319f5c121e98990772e018eb9781bf7dc6316'
+    repo: 'git://github.com/puppetlabs/puppet-win32-ruby.git'
 apt_host: 'apt.puppetlabs.com'
 apt_repo_url: 'http://apt.puppetlabs.com'
 apt_repo_path: '/opt/repository/incoming'

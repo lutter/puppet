@@ -16,7 +16,7 @@ class CheckPuppet
     :interval  => 30,
   }
 
-  o = OptionParser.new do |o|
+  OptionParser.new do |o|
     o.set_summary_indent('  ')
     o.banner =    "Usage: #{script_name} [OPTIONS]"
     o.define_head "The check_puppet Nagios plug-in checks that specified Puppet process is running and the state file is no older than specified interval."
@@ -27,17 +27,17 @@ class CheckPuppet
         o.on(
           "-s", "--statefile=statefile", String, "The state file",
 
-    "Default: #{OPTIONS[:statefile]}") { |OPTIONS[:statefile]| }
+    "Default: #{OPTIONS[:statefile]}") { |op| OPTIONS[:statefile] = op }
 
       o.on(
         "-p", "--process=processname", String, "The process to check",
 
-    "Default: #{OPTIONS[:process]}")   { |OPTIONS[:process]| }
+    "Default: #{OPTIONS[:process]}")   { |op| OPTIONS[:process] = op }
 
       o.on(
         "-i", "--interval=value", Integer,
 
-    "Default: #{OPTIONS[:interval]} minutes")  { |OPTIONS[:interval]| }
+    "Default: #{OPTIONS[:interval]} minutes")  { |op| OPTIONS[:interval] = op }
 
     o.separator ""
     o.on_tail("-h", "--help", "Show this help message.") do

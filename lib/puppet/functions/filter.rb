@@ -31,9 +31,7 @@
 #      $a = {"raspberry"=>0, "blueberry"=>1, "orange"=>1}
 #      $a.filter |$key, $x| { $x =~ /berry$/ and $x >= 1 } # blueberry
 #
-# @since 3.4 for Array and Hash
-# @since 3.5 for other enumerables
-# @note requires `parser = future`
+# @since 4.0.0
 #
 Puppet::Functions.create_function(:filter) do
   dispatch :filter_Hash_2 do
@@ -57,17 +55,11 @@ Puppet::Functions.create_function(:filter) do
   end
 
   def filter_Hash_1(hash, pblock)
-    result = hash.select {|x, y| pblock.call(self, [x, y]) }
-    # Ruby 1.8.7 returns Array
-    result = Hash[result] unless result.is_a? Hash
-    result
+    hash.select {|x, y| pblock.call([x, y]) }
   end
 
   def filter_Hash_2(hash, pblock)
-    result = hash.select {|x, y| pblock.call(self, x, y) }
-    # Ruby 1.8.7 returns Array
-    result = Hash[result] unless result.is_a? Hash
-    result
+    hash.select {|x, y| pblock.call(x, y) }
   end
 
   def filter_Enumerable_1(enumerable, pblock)
@@ -77,7 +69,7 @@ Puppet::Functions.create_function(:filter) do
     begin
       loop do
         it = enum.next
-        if pblock.call(nil, it) == true
+        if pblock.call(it) == true
           result << it
         end
       end
@@ -93,7 +85,7 @@ Puppet::Functions.create_function(:filter) do
     begin
       loop do
         it = enum.next
-        if pblock.call(nil, index, it) == true
+        if pblock.call(index, it) == true
           result << it
         end
         index += 1

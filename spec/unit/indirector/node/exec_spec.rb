@@ -14,16 +14,19 @@ describe Puppet::Node::Exec do
   describe "when constructing the command to run" do
     it "should use the external_node script as the command" do
       Puppet[:external_nodes] = "/bin/echo"
-      @searcher.command.should == %w{/bin/echo}
+      expect(@searcher.command).to eq(%w{/bin/echo})
     end
 
     it "should throw an exception if no external node command is set" do
       Puppet[:external_nodes] = "none"
-      proc { @searcher.find(stub('request', :key => "foo")) }.should raise_error(ArgumentError)
+      expect { @searcher.find(stub('request', :key => "foo")) }.to raise_error(ArgumentError)
     end
   end
 
   describe "when handling the results of the command" do
+    let(:testing_env) { Puppet::Node::Environment.create(:testing, []) }
+    let(:other_env) { Puppet::Node::Environment.create(:other, []) }
+
     before do
       @name = "yay"
       @node = Puppet::Node.new(@name)
@@ -39,21 +42,29 @@ describe Puppet::Node::Exec do
       @request = Puppet::Indirector::Request.new(:node, :find, @name, nil)
     end
 
+    around do |example|
+      envs = Puppet::Environments::Static.new(testing_env, other_env)
+
+      Puppet.override(:environments => envs) do
+        example.run
+      end
+    end
+
     it "should translate the YAML into a Node instance" do
       # Use an empty hash
-      @searcher.find(@request).should equal(@node)
+      expect(@searcher.find(@request)).to equal(@node)
     end
 
     it "should set the resulting parameters as the node parameters" do
       @result[:parameters] = {"a" => "b", "c" => "d"}
       @searcher.find(@request)
-      @node.parameters.should == {"a" => "b", "c" => "d"}
+      expect(@node.parameters).to eq({"a" => "b", "c" => "d"})
     end
 
     it "should set the resulting classes as the node classes" do
       @result[:classes] = %w{one two}
       @searcher.find(@request)
-      @node.classes.should == [ 'one', 'two' ]
+      expect(@node.classes).to eq([ 'one', 'two' ])
     end
 
     it "should merge the node's facts with its parameters" do
@@ -62,15 +73,15 @@ describe Puppet::Node::Exec do
     end
 
     it "should set the node's environment if one is provided" do
-      @result[:environment] = "yay"
+      @result[:environment] = "testing"
       @searcher.find(@request)
-      @node.environment.to_s.should == 'yay'
+      expect(@node.environment.name).to eq(:testing)
     end
 
     it "should set the node's environment based on the request if not otherwise provided" do
-      @request.environment = "boo"
+      @request.environment = "other"
       @searcher.find(@request)
-      @node.environment.to_s.should == 'boo'
+      expect(@node.environment.name).to eq(:other)
     end
   end
 end

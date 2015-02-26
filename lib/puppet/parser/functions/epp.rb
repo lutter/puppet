@@ -1,7 +1,15 @@
 Puppet::Parser::Functions::newfunction(:epp, :type => :rvalue, :arity => -2, :doc =>
 "Evaluates an Embedded Puppet Template (EPP) file and returns the rendered text result as a String.
 
-EPP support the following tags:
+The first argument to this function should be a `<MODULE NAME>/<TEMPLATE FILE>`
+reference, which will load `<TEMPLATE FILE>` from a module's `templates`
+directory. (For example, the reference `apache/vhost.conf.epp` will load the
+file `<MODULES DIRECTORY>/apache/templates/vhost.conf.epp`.)
+
+The second argument is optional; if present, it should be a hash containing parameters for the
+template. (See below.)
+
+EPP supports the following tags:
 
 * `<%= puppet expression %>` - This tag renders the value of the expression it contains.
 * `<% puppet expression(s) %>` - This tag will execute the expression(s) it contains, but renders nothing.
@@ -30,8 +38,7 @@ Template parameters shadow variables in outer scopes. File based epp does never 
 scope where the `epp` function is called from.
 
 - See function inline_epp for examples of EPP
-- Since 3.5
-- Requires Future Parser") do |args|
+- Since 4.0.0") do |args|
 
   function_fail(["epp() is only available when parser/evaluator future is in effect"])
 end

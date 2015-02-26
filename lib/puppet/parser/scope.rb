@@ -1,3 +1,4 @@
+
 # The scope class, which handles storing and retrieving variables and types and
 # such.
 require 'forwardable'
@@ -181,9 +182,22 @@ class Puppet::Parser::Scope
 
   # Returns true if the variable of the given name is set to any value (including nil)
   #
+  # @return [Boolean] if variable exists or not
+  #
   def exist?(name)
-    next_scope = inherited_scope || enclosing_scope
-    effective_symtable(true).include?(name) || next_scope && next_scope.exist?(name)
+    # Note !! ensure the answer is boolean
+    !! if name =~ /^(.*)::(.+)$/
+      class_name = $1
+      variable_name = $2
+      # lookup class, but do not care if it is not evaluated since that will result
+      # in it not existing anyway. (Tests may run with just scopes and no evaluated classes).
+      klass = find_hostclass(class_name)
+      other_scope = klass.nil? ? nil : class_scope(klass)
+      other_scope && other_scope.exist?(variable_name)
+    else
+      next_scope = inherited_scope || enclosing_scope
+      effective_symtable(true).include?(name) || next_scope && next_scope.exist?(name)
+    end
   end
 
   # Returns true if the given name is bound in the current (most nested) scope for assignments.
@@ -224,22 +238,12 @@ class Puppet::Parser::Scope
     end
   end
 
-  # Add to our list of namespaces.
-  def add_namespace(ns)
-    return false if @namespaces.include?(ns)
-    if @namespaces == [""]
-      @namespaces = [ns]
-    else
-      @namespaces << ns
-    end
-  end
-
-  def find_hostclass(name, options = {})
-    known_resource_types.find_hostclass(namespaces, name, options)
+  def find_hostclass(name)
+    known_resource_types.find_hostclass(name)
   end
 
   def find_definition(name)
-    known_resource_types.find_definition(namespaces, name)
+    known_resource_types.find_definition(name)
   end
 
   def find_global_scope()
@@ -270,9 +274,9 @@ class Puppet::Parser::Scope
     end
 
     if n = options.delete(:namespace)
-      @namespaces = [n]
+      @namespaces = [n.freeze].freeze
     else
-      @namespaces = [""]
+      @namespaces = ["".freeze].freeze
     end
 
     raise Puppet::DevError, "compiler passed in options" if options.include? :compiler
@@ -296,8 +300,6 @@ class Puppet::Parser::Scope
     # The table for storing class singletons.  This will only actually
     # be used by top scopes and node scopes.
     @class_scopes = {}
-
-    @enable_immutable_data = Puppet[:immutable_node_data]
   end
 
   # Store the fact that we've evaluated a class, and store a reference to
@@ -354,7 +356,8 @@ class Puppet::Parser::Scope
 
   # Look up a defined type.
   def lookuptype(name)
-    find_definition(name) || find_hostclass(name)
+    # This happens a lot, avoid making a call to make a call
+    known_resource_types.find_definition(name) || known_resource_types.find_hostclass(name)
   end
 
   def undef_as(x,v)
@@ -401,12 +404,7 @@ class Puppet::Parser::Scope
 
   def variable_not_found(name, reason=nil)
     if Puppet[:strict_variables]
-      if Puppet[:parser] == 'future'
         throw :undefined_variable
-      else
-        reason_msg = reason.nil? ? '' : "; #{reason}"
-        raise Puppet::ParseError, "Undefined variable #{name.inspect}#{reason_msg}"
-      end
     else
       nil
     end
@@ -528,29 +526,11 @@ class Puppet::Parser::Scope
   # by default) including the values defined in parent. Local values
   # shadow parent values. Ephemeral scopes for match results ($0 - $n) are not included.
   #
-  # This is currently a wrapper for to_hash_legacy or to_hash_future.
-  #
-  # @see to_hash_future
-  #
-  # @see to_hash_legacy
   def to_hash(recursive = true)
-    @parser ||= Puppet[:parser]
-    if @parser == 'future'
-      to_hash_future(recursive)
-    else
-      to_hash_legacy(recursive)
-    end
-  end
-
-  # Fixed version of to_hash that implements scoping correctly (i.e., with
-  # dynamic scoping disabled #28200 / PUP-1220
-  #
-  # @see to_hash
-  def to_hash_future(recursive)
     if recursive and has_enclosing_scope?
-      target = enclosing_scope.to_hash_future(recursive)
+      target = enclosing_scope.to_hash(recursive)
       if !(inherited = inherited_scope).nil?
-        target.merge!(inherited.to_hash_future(recursive))
+        target.merge!(inherited.to_hash(recursive))
       end
     else
       target = Hash.new
@@ -561,24 +541,8 @@ class Puppet::Parser::Scope
     target
   end
 
-  # The old broken implementation of to_hash that retains the dynamic scoping
-  # semantics
-  #
-  # @see to_hash
-  def to_hash_legacy(recursive = true)
-    if recursive and parent
-      target = parent.to_hash_legacy(recursive)
-    else
-      target = Hash.new
-    end
-
-    # add all local scopes
-    @ephemeral.last.add_entries_to(target)
-    target
-  end
-
   def namespaces
-    @namespaces.dup
+    @namespaces
   end
 
   # Create a new scope and set these options.
@@ -625,7 +589,7 @@ class Puppet::Parser::Scope
     end
 
     # Check for reserved variable names
-    if @enable_immutable_data && !options[:privileged] && RESERVED_VARIABLE_NAMES.include?(name)
+    if !options[:privileged] && RESERVED_VARIABLE_NAMES.include?(name)
       raise Puppet::ParseError, "Attempt to assign to a reserved variable name: '#{name}'"
     end
 
@@ -655,10 +619,6 @@ class Puppet::Parser::Scope
   end
 
   def set_facts(hash)
-    # Remove _timestamp (it has an illegal datatype). It is not allowed to mutate the given hash
-    # since it contains the facts.
-    hash = hash.dup
-    hash.delete('_timestamp')
     setvar('facts', deep_freeze(hash), :privileged => true)
   end
 
@@ -804,7 +764,7 @@ class Puppet::Parser::Scope
   end
 
   def find_defined_resource_type(type)
-    known_resource_types.find_definition(namespaces, type.to_s.downcase)
+    known_resource_types.find_definition(type.to_s.downcase)
   end
 
 
@@ -846,41 +806,34 @@ class Puppet::Parser::Scope
   # Transforms references to classes to the form suitable for
   # lookup in the compiler.
   #
-  # Makes names passed in the names array absolute if they are relative
-  # Names are now made absolute if Puppet[:parser] == 'future', this will
-  # be the default behavior in Puppet 4.0
+  # Makes names passed in the names array absolute if they are relative.
   #
-  # Transforms Class[] and Resource[] type referenes to class name
+  # Transforms Class[] and Resource[] type references to class name
   # or raises an error if a Class[] is unspecific, if a Resource is not
   # a 'class' resource, or if unspecific (no title).
   #
-  # TODO: Change this for 4.0 to always make names absolute
   #
   # @param names [Array<String>] names to (optionally) make absolute
   # @return [Array<String>] names after transformation
   #
   def transform_and_assert_classnames(names)
-    if Puppet[:parser] == 'future'
-      names.map do |name|
-        case name
-        when String
-          name.sub(/^([^:]{1,2})/, '::\1')
+    names.map do |name|
+      case name
+      when String
+        name.sub(/^([^:]{1,2})/, '::\1')
 
-        when Puppet::Resource
-          assert_class_and_title(name.type, name.title)
-          name.title.sub(/^([^:]{1,2})/, '::\1')
+      when Puppet::Resource
+        assert_class_and_title(name.type, name.title)
+        name.title.sub(/^([^:]{1,2})/, '::\1')
 
-        when Puppet::Pops::Types::PHostClassType
-          raise ArgumentError, "Cannot use an unspecific Class[] Type" unless name.class_name
-          name.class_name.sub(/^([^:]{1,2})/, '::\1')
+      when Puppet::Pops::Types::PHostClassType
+        raise ArgumentError, "Cannot use an unspecific Class[] Type" unless name.class_name
+        name.class_name.sub(/^([^:]{1,2})/, '::\1')
 
-        when Puppet::Pops::Types::PResourceType
-          assert_class_and_title(name.type_name, name.title)
-          name.title.sub(/^([^:]{1,2})/, '::\1')
-        end
+      when Puppet::Pops::Types::PResourceType
+        assert_class_and_title(name.type_name, name.title)
+        name.title.sub(/^([^:]{1,2})/, '::\1')
       end
-    else
-      names
     end
   end
 

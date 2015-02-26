@@ -1,5 +1,5 @@
 module Puppet
-  newtype(:exec) do
+  Type.newtype(:exec) do
     include Puppet::Util::Execution
     require 'timeout'
 
@@ -297,7 +297,7 @@ module Puppet
       desc "The number of times execution of the command should be tried.
         Defaults to '1'. This many attempts will be made to execute
         the command until an acceptable return code is returned.
-        Note that the timeout paramater applies to each try rather than
+        Note that the timeout parameter applies to each try rather than
         to the complete set of tries."
 
       munge do |value|

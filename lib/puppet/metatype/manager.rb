@@ -83,12 +83,6 @@ module Manager
 
     options = symbolize_options(options)
 
-
-    if options.include?(:parent) 
-      Puppet.deprecation_warning "option :parent is deprecated. It has no effect"
-      options.delete(:parent)
-    end
-
     # Then create the class.
 
     klass = genclass(
@@ -119,7 +113,7 @@ module Manager
     klass.providerloader = Puppet::Util::Autoload.new(klass, "puppet/provider/#{klass.name.to_s}")
 
     # We have to load everything so that we can figure out the default provider.
-    klass.providerloader.loadall
+    klass.providerloader.loadall Puppet.lookup(:current_environment)
     klass.providify unless klass.providers.empty?
 
     klass
@@ -174,7 +168,7 @@ module Manager
   # @api private
   def typeloader
     unless defined?(@typeloader)
-      @typeloader = Puppet::Util::Autoload.new(self, "puppet/type", :wrap => false)
+      @typeloader = Puppet::Util::Autoload.new(self, "puppet/type")
     end
 
     @typeloader

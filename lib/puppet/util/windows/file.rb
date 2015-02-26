@@ -91,12 +91,6 @@ module Puppet::Util::Windows::File
 
   INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF #define INVALID_FILE_ATTRIBUTES (DWORD (-1))
 
-  def get_file_attributes(file_name)
-    Puppet.deprecation_warning('Puppet::Util::Windows::File.get_file_attributes is deprecated; please use Puppet::Util::Windows::File.get_attributes')
-    get_attributes(file_name)
-  end
-  module_function :get_file_attributes
-
   def get_attributes(file_name)
     result = GetFileAttributesW(wide_string(file_name.to_s))
     return result unless result == INVALID_FILE_ATTRIBUTES
@@ -234,7 +228,7 @@ module Puppet::Util::Windows::File
   module_function :readlink
 
   def stat(file_name)
-    file_name = file_name.to_s # accomodate PathName or String
+    file_name = file_name.to_s # accommodate PathName or String
     stat = File.stat(file_name)
     singleton_class = class << stat; self; end
     target_path = file_name
@@ -258,7 +252,7 @@ module Puppet::Util::Windows::File
   module_function :stat
 
   def lstat(file_name)
-    file_name = file_name.to_s # accomodate PathName or String
+    file_name = file_name.to_s # accommodate PathName or String
     # monkey'ing around!
     stat = File.lstat(file_name)
 

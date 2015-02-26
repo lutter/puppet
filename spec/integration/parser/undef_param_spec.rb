@@ -12,7 +12,7 @@ describe "Parameter passing" do
 
   def expect_the_message_to_be(message, node = Puppet::Node.new('the node'))
     catalog = compile_to_catalog(yield, node)
-    catalog.resource('Notify', 'something')[:message].should == message
+    expect(catalog.resource('Notify', 'something')[:message]).to eq(message)
   end
 
   def expect_puppet_error(message, node = Puppet::Node.new('the node'))
@@ -21,8 +21,8 @@ describe "Parameter passing" do
 
   it "overrides the default when a value is given" do
     expect_the_message_to_be('2') do <<-MANIFEST
-      define a($x=1) { notify { 'something': message => $x }}
-      a {'a': x => 2}
+      define a($x='1') { notify { 'something': message => $x }}
+      a {'a': x => '2'}
       MANIFEST
     end
   end
@@ -55,7 +55,7 @@ describe "Parameter passing" do
 
   it "uses the default when 'undef' is given'" do
     expect_the_message_to_be('1') do <<-MANIFEST
-        define a($x=1) { notify { 'something': message => $x }}
+        define a($x='1') { notify { 'something': message => $x }}
         a {'a': x => undef}
       MANIFEST
     end
@@ -63,7 +63,7 @@ describe "Parameter passing" do
 
   it "uses the default when no parameter is provided" do
     expect_the_message_to_be('1') do <<-MANIFEST
-        define a($x=1) { notify { 'something': message => $x }}
+        define a($x='1') { notify { 'something': message => $x }}
         a {'a': }
       MANIFEST
     end

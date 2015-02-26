@@ -143,14 +143,6 @@ class Puppet::Parser::Resource < Puppet::Resource
     end
   end
 
-  # This only mattered for clients < 0.25, which we don't support any longer.
-  # ...but, since this hasn't been deprecated, and at least some functions
-  # used it, deprecate now rather than just eliminate. --daniel 2012-07-15
-  def metaparam_compatibility_mode?
-    Puppet.deprecation_warning "metaparam_compatibility_mode? is obsolete since < 0.25 clients are really, really not supported any more"
-    false
-  end
-
   def name
     self[:name] || self.title
   end
@@ -162,12 +154,10 @@ class Puppet::Parser::Resource < Puppet::Resource
   # if we ever receive a parameter named 'tag', set
   # the resource tags with its value.
   def set_parameter(param, value = nil)
-    if ! value.nil?
+    if ! param.is_a?(Puppet::Parser::Resource::Param)
       param = Puppet::Parser::Resource::Param.new(
         :name => param, :value => value, :source => self.source
       )
-    elsif ! param.is_a?(Puppet::Parser::Resource::Param)
-      raise ArgumentError, "Received incomplete information - no value provided for parameter #{param}"
     end
 
     tag(*param.value) if param.name == :tag
@@ -191,15 +181,22 @@ class Puppet::Parser::Resource < Puppet::Resource
     copy_as_resource.to_ral
   end
 
-  # Is the receiver tagged with the given tags?
-  # This match takes into account the tags that a resource will inherit from its container
+  # Answers if this resource is tagged with at least one of the tags given in downcased string form.
+  #
+  # The method is a faster variant of the tagged? method that does no conversion of its
+  # arguments.
+  #
+  # The match takes into account the tags that a resource will inherit from its container
   # but have not been set yet.
   # It does *not* take tags set via resource defaults as these will *never* be set on
   # the resource itself since all resources always have tags that are automatically
   # assigned.
   #
-  def tagged?(*tags)
-    super || ((scope_resource = scope.resource) && scope_resource != self && scope_resource.tagged?(tags))
+  # @param tag_array [Array[String]] list tags to look for
+  # @return [Boolean] true if this instance is tagged with at least one of the provided tags
+  #
+  def raw_tagged?(tag_array)
+    super || ((scope_resource = scope.resource) && !scope_resource.equal?(self) && scope_resource.raw_tagged?(tag_array))
   end
 
   private
@@ -217,7 +214,7 @@ class Puppet::Parser::Resource < Puppet::Resource
 
   def add_scope_tags
     if scope_resource = scope.resource
-      tag(*scope_resource.tags)
+      merge_tags(scope_resource)
     end
   end
 

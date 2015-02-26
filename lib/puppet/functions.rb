@@ -1,5 +1,3 @@
-# @note WARNING: This new function API is still under development and may change at any time
-#
 # Functions in the puppet language can be written in Ruby and distributed in
 # puppet modules. The function is written by creating a file in the module's
 # `lib/puppet/functions/<modulename>` directory, where `<modulename>` is
@@ -164,7 +162,7 @@ module Puppet::Functions
     if the_class.dispatcher.empty?
       simple_name = func_name.split(/::/)[-1]
       type, names = default_dispatcher(the_class, simple_name)
-      last_captures_rest = (type.size_range[1] == Puppet::Pops::Types::INFINITY)
+      last_captures_rest = (type.size_range[1] == Float::INFINITY)
       the_class.dispatcher.add_dispatch(type, simple_name, names, nil, nil, nil, last_captures_rest)
     end
 
@@ -184,26 +182,11 @@ module Puppet::Functions
 
   # @api private
   def self.min_max_param(method)
-    # Ruby 1.8.7 does not have support for details about parameters
-    if method.respond_to?(:parameters)
-      result = {:req => 0, :opt => 0, :rest => 0 }
-      # TODO: Optimize into one map iteration that produces names map, and sets
-      # count as side effect
-      method.parameters.each { |p| result[p[0]] += 1 }
-      from = result[:req]
-      to = result[:rest] > 0 ? :default : from + result[:opt]
-      names = method.parameters.map {|p| p[1].to_s }
-    else
-      # Cannot correctly compute the signature in Ruby 1.8.7 because arity for
-      # optional values is screwed up (there is no way to get the upper limit),
-      # an optional looks the same as a varargs In this case - the failure will
-      # simply come later when the call fails
-      #
-      arity = method.arity
-      from = arity >= 0 ? arity : -arity -1
-      to = arity >= 0 ? arity : :default  # i.e. infinite (which is wrong when there are optional - flaw in 1.8.7)
-      names = [] # no names available
-    end
+    result = {:req => 0, :opt => 0, :rest => 0 }
+    # count per parameter kind, and get array of names
+    names = method.parameters.map { |p| result[p[0]] += 1 ; p[1].to_s }
+    from = result[:req]
+    to = result[:rest] > 0 ? :default : from + result[:opt]
     [from, to, names]
   end
 
@@ -263,21 +246,26 @@ module Puppet::Functions
     # Defines a positional parameter with type and name
     #
     # @param type [String] The type specification for the parameter.
-    # @param name [String] The name of the parameter. This is primarily used
+    # @param name [Symbol] The name of the parameter. This is primarily used
     #   for error message output and does not have to match the name of the
     #   parameter on the implementation method.
     # @return [Void]
     #
     # @api public
     def param(type, name)
-      if type.is_a?(String)
-        @types << type
-        @names << name
-        # mark what should be picked for this position when dispatching
-        @weaving << @names.size()-1
-      else
+      raise ArgumentError, 'Parameters cannot be added after a block_param' unless @block_type.nil?
+      unless type.is_a?(String)
         raise ArgumentError, "Type signature argument must be a String reference to a Puppet Data Type. Got #{type.class}"
       end
+
+      unless name.is_a?(Symbol)
+        raise ArgumentError, "Parameter name argument must be a Symbol. Got #{type.class}"
+      end
+
+      @types << type
+      @names << name
+      # mark what should be picked for this position when dispatching
+      @weaving << @names.size()-1
     end
 
     # Defines one required block parameter that may appear last. If type and name is missing the
@@ -290,7 +278,7 @@ module Puppet::Functions
       when 0
         # the type must be an independent instance since it will be contained in another type
         type = @all_callables.copy
-        name = 'block'
+        name = :block
       when 1
         # the type must be an independent instance since it will be contained in another type
         type = @all_callables.copy
@@ -306,13 +294,17 @@ module Puppet::Functions
         raise ArgumentError, "Expected PCallableType or PVariantType thereof, got #{type.class}"
       end
 
-      unless name.is_a?(String) || name.is_a?(Symbol)
-        raise ArgumentError, "Expected block_param name to be a String or Symbol, got #{name.class}"
+      unless name.is_a?(Symbol)
+        raise ArgumentError, "Expected block_param name to be a Symbol, got #{name.class}"
       end
 
       if @block_type.nil?
         @block_type = type
         @block_name = name
+
+        # mark what should be picked for this position when dispatching. This is the size of
+        # the @names array since the block is required to appear last
+        @weaving << @names.size()
       else
         raise ArgumentError, "Attempt to redefine block"
       end
@@ -329,7 +321,7 @@ module Puppet::Functions
       @block_type = Puppet::Pops::Types::TypeFactory.optional(@block_type)
     end
 
-    # Specifies the min and max occurance of arguments (of the specified types)
+    # Specifies the min and max occurrence of arguments (of the specified types)
     # if something other than the exact count from the number of specified
     # types). The max value may be specified as :default if an infinite number of
     # arguments are supported. When max is > than the number of specified
@@ -470,6 +462,20 @@ module Puppet::Functions
         end
         instance_variable_get(ivar)
       end
+    end
+
+    # Allows the implementation of a function to call other functions by name and pass the caller
+    # scope. The callable functions are those visible to the same loader that loaded this function
+    # (the calling function).
+    #
+    # @param scope [Puppet::Parser::Scope] The caller scope
+    # @param function_name [String] The name of the function
+    # @param *args [Object] splat of arguments
+    # @return [Object] The result returned by the called function
+    #
+    # @api public
+    def call_function_with_scope(scope, function_name, *args)
+      internal_call_function(scope, function_name, args)
     end
   end
 

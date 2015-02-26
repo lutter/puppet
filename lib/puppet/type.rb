@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require 'puppet'
 require 'puppet/util/log'
 require 'puppet/util/metric'
@@ -61,8 +62,8 @@ module Puppet
 #     their name, and these resources are said to be non-isomorphic.
 #
 # @note The Type class deals with multiple concerns; some methods provide an internal DSL for convenient definition
-#   of types, other methods deal with various aspects while running; wiring up a resource (expressed in Puppet DSL
-#   or Ruby DSL) with its _resource type_ (i.e. an instance of Type) to enable validation, transformation of values
+#   of types, other methods deal with various aspects while running; wiring up a resource (expressed in Puppet DSL)
+#   with its _resource type_ (i.e. an instance of Type) to enable validation, transformation of values
 #   (munge/unmunge), etc. Lastly, Type is also responsible for dealing with Providers; the concrete implementations
 #   of the behavior that constitutes how a particular Type behaves on a particular type of system (e.g. how
 #   commands are executed on a flavor of Linux, on Windows, etc.). This means that as you are reading through the
@@ -104,6 +105,19 @@ class Type
     # @return [Array<Puppet::Property>] The list of declared properties for the resource type.
     # The returned lists contains instances if Puppet::Property or its subclasses.
     attr_reader :properties
+  end
+
+  # Allow declaring that a type is actually a capability
+  class << self
+    # @todo lutter 2014-11-04: this is right now only used in the
+    # declaration of the Sql capability; none of the rest of the code
+    # distingusihes between ordinary types and capabilities. We should
+    # remove this until it is actually needed by something
+    attr_accessor :is_capability
+
+    def is_capability?
+      is_capability
+    end
   end
 
   # Returns all the attribute names of the type in the appropriate order.
@@ -930,13 +944,8 @@ class Type
 
   # Removes this object (FROM WHERE?)
   # @todo removes if from where?
-  # @overload remove(rmdeps)
-  #   @deprecated Use remove()
-  #   @param rmdeps [Boolean] intended to indicate that all subscriptions should also be removed, ignored.
-  # @overload remove()
   # @return [void]
-  #
-  def remove(rmdeps = true)
+  def remove()
     # This is hackish (mmm, cut and paste), but it works for now, and it's
     # better than warnings.
     @parameters.each do |name, obj|
@@ -1011,15 +1020,15 @@ class Type
       end
     end
 
-    properties.each { |property|
-      unless is.include? property
+    properties.each { |prop|
+      unless is.include? prop
         raise Puppet::DevError,
-          "The is value is not in the is array for '#{property.name}'"
+          "The is value is not in the is array for '#{prop.name}'"
       end
 
-      propis = is[property]
-      unless property.safe_insync?(propis)
-        property.debug("Not in sync: #{propis.inspect} vs #{property.should.inspect}")
+      propis = is[prop]
+      unless prop.safe_insync?(propis)
+        prop.debug("Not in sync: #{propis.inspect} vs #{prop.should.inspect}")
         insync = false
       #else
       #    property.debug("In sync")
@@ -1384,7 +1393,7 @@ class Type
           }
 
           File['sshdconfig'] {
-            mode => 644,
+            mode => '0644',
           }
 
       There's no way here for the Puppet parser to know that these two stanzas
@@ -1422,14 +1431,13 @@ class Type
           file {'/etc/hosts':
             ensure => file,
             source => 'puppet:///modules/site/hosts',
-            mode   => 0644,
+            mode   => '0644',
             tag    => ['bootstrap', 'minimumrun', 'mediumrun'],
           }
 
       Tags are useful for things like applying a subset of a host's configuration
       with [the `tags` setting](/references/latest/configuration.html#tags)
-      (e.g. `puppet agent --test --tags bootstrap`) or filtering alerts with
-      [the `tagmail` report processor](http://docs.puppetlabs.com/references/latest/report.html#tagmail)."
+      (e.g. `puppet agent --test --tags bootstrap`)."
 
     munge do |tags|
       tags = [tags] unless tags.is_a? Array
@@ -1935,14 +1943,32 @@ class Type
   ###############################
   # All of the relationship code.
 
-  # Adds a block producing a single name (or list of names) of the given resource type name to autorequire.
-  # Resources in the catalog that have the named type and a title that is included in the result will be linked
-  # to the calling resource as a requirement.
+  # Adds a block producing a single name (or list of names) of the given
+  # resource type name to autorelate.
+  #
+  # The four relationship types require, before, notify, and subscribe are all
+  # supported.
+  #
+  # Be *careful* with notify and subscribe as they may have unintended
+  # consequences.
+  #
+  # Resources in the catalog that have the named type and a title that is
+  # included in the result will be linked to the calling resource as a
+  # requirement.
   #
   # @example Autorequire the files File['foo', 'bar']
   #   autorequire( 'file', {|| ['foo', 'bar'] })
   #
-  # @param name [String] the name of a type of which one or several resources should be autorequired e.g. "file"
+  # @example Autobefore the files File['foo', 'bar']
+  #   autobefore( 'file', {|| ['foo', 'bar'] })
+  #
+  # @example Autosubscribe the files File['foo', 'bar']
+  #   autosubscribe( 'file', {|| ['foo', 'bar'] })
+  #
+  # @example Autonotify the files File['foo', 'bar']
+  #   autonotify( 'file', {|| ['foo', 'bar'] })
+  #
+  # @param name [String] the name of a type of which one or several resources should be autorelated e.g. "file"
   # @yield [ ] a block returning list of names of given type to auto require
   # @yieldreturn [String, Array<String>] one or several resource names for the named type
   # @return [void]
@@ -1952,6 +1978,21 @@ class Type
   def self.autorequire(name, &block)
     @autorequires ||= {}
     @autorequires[name] = block
+  end
+
+  def self.autobefore(name, &block)
+    @autobefores ||= {}
+    @autobefores[name] = block
+  end
+
+  def self.autosubscribe(name, &block)
+    @autosubscribes ||= {}
+    @autosubscribes[name] = block
+  end
+
+  def self.autonotify(name, &block)
+    @autonotifies ||= {}
+    @autonotifies[name] = block
   end
 
   # Provides iteration over added auto-requirements (see {autorequire}).
@@ -1966,7 +2007,43 @@ class Type
     }
   end
 
-  # Adds dependencies to the catalog from added autorequirements.
+  # Provides iteration over added auto-requirements (see {autobefore}).
+  # @yieldparam type [String] the name of the type to autoriquire an instance of
+  # @yieldparam block [Proc] a block producing one or several dependencies to auto require (see {autobefore}).
+  # @yieldreturn [void]
+  # @return [void]
+  def self.eachautobefore
+    @autobefores ||= {}
+    @autobefores.each { |type,block|
+      yield(type, block)
+    }
+  end
+
+  # Provides iteration over added auto-requirements (see {autosubscribe}).
+  # @yieldparam type [String] the name of the type to autoriquire an instance of
+  # @yieldparam block [Proc] a block producing one or several dependencies to auto require (see {autosubscribe}).
+  # @yieldreturn [void]
+  # @return [void]
+  def self.eachautosubscribe
+    @autosubscribes ||= {}
+    @autosubscribes.each { |type,block|
+      yield(type, block)
+    }
+  end
+
+  # Provides iteration over added auto-requirements (see {autonotify}).
+  # @yieldparam type [String] the name of the type to autoriquire an instance of
+  # @yieldparam block [Proc] a block producing one or several dependencies to auto require (see {autonotify}).
+  # @yieldreturn [void]
+  # @return [void]
+  def self.eachautonotify
+    @autonotifies ||= {}
+    @autonotifies.each { |type,block|
+      yield(type, block)
+    }
+  end
+
+  # Adds dependencies to the catalog from added autorelations.
   # See {autorequire} for how to add an auto-requirement.
   # @todo needs details - see the param rel_catalog, and type of this param
   # @param rel_catalog [Puppet::Resource::Catalog, nil] the catalog to
@@ -1974,12 +2051,15 @@ class Type
   #   type instance was added to a catalog)
   # @raise [Puppet::DevError] if there is no catalog
   #
-  def autorequire(rel_catalog = nil)
+  def autorelation(rel_type, rel_catalog = nil)
     rel_catalog ||= catalog
     raise(Puppet::DevError, "You cannot add relationships without a catalog") unless rel_catalog
 
     reqs = []
-    self.class.eachautorequire { |type, block|
+
+    auto_rel = "eachauto#{rel_type}".to_sym
+
+    self.class.send(auto_rel) { |type, block|
       # Ignore any types we can't find, although that would be a bit odd.
       next unless Puppet::Type.type(type)
 
@@ -1991,17 +2071,37 @@ class Type
       list.each { |dep|
         # Support them passing objects directly, to save some effort.
         unless dep.is_a? Puppet::Type
-          # Skip autorequires that we aren't managing
+          # Skip autorelation that we aren't managing
           unless dep = rel_catalog.resource(type, dep)
             next
           end
         end
 
-        reqs << Puppet::Relationship.new(dep, self)
+        if [:require, :subscribe].include?(rel_type)
+          reqs << Puppet::Relationship.new(dep, self)
+        else
+          reqs << Puppet::Relationship.new(self, dep)
+        end
       }
     }
 
     reqs
+  end
+
+  def autorequire(rel_catalog = nil)
+    autorelation(:require, rel_catalog)
+  end
+
+  def autobefore(rel_catalog = nil)
+    autorelation(:before, rel_catalog)
+  end
+
+  def autosubscribe(rel_catalog = nil)
+    autorelation(:subscribe, rel_catalog)
+  end
+
+  def autonotify(rel_catalog = nil)
+    autorelation(:notify, rel_catalog)
   end
 
   # Builds the dependencies associated with this resource.
@@ -2448,5 +2548,3 @@ class Type
   end
 end
 end
-
-require 'puppet/provider'

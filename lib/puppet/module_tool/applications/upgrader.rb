@@ -107,9 +107,9 @@ module Puppet::ModuleTool
             add_module_name_constraints_to_graph(graph)
           end
 
-          installed_modules.each do |mod, release|
-            mod = mod.tr('/', '-')
-            next if mod == name
+          installed_modules.each do |installed_module, release|
+            installed_module = installed_module.tr('/', '-')
+            next if installed_module == name
 
             version = release.version
 
@@ -117,19 +117,17 @@ module Puppet::ModuleTool
               # Since upgrading already installed modules can be troublesome,
               # we'll place constraints on the graph for each installed
               # module, locking it to upgrades within the same major version.
-              ">=#{version} #{version.major}.x".tap do |range|
-                graph.add_constraint('installed', mod, range) do |node|
-                  Semantic::VersionRange.parse(range).include? node.version
-                end
+              installed_range = ">=#{version} #{version.major}.x"
+              graph.add_constraint('installed', installed_module, installed_range) do |node|
+                Semantic::VersionRange.parse(installed_range).include? node.version
               end
 
               release.mod.dependencies.each do |dep|
                 dep_name = dep['name'].tr('/', '-')
 
-                dep['version_requirement'].tap do |range|
-                  graph.add_constraint("#{mod} constraint", dep_name, range) do |node|
-                    Semantic::VersionRange.parse(range).include? node.version
-                  end
+                range = dep['version_requirement']
+                graph.add_constraint("#{installed_module} constraint", dep_name, range) do |node|
+                  Semantic::VersionRange.parse(range).include? node.version
                 end
               end
             end

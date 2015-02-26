@@ -1,5 +1,5 @@
 test_name "Package:IPS query"
-confine :to, :platform => 'solaris'
+confine :to, :platform => 'solaris-11'
 
 require 'puppet/acceptance/solaris_util'
 extend Puppet::Acceptance::IPSUtils
@@ -23,11 +23,11 @@ agents.each do |agent|
     assert_match( /ensure: created/, result.stdout, "err: #{agent}")
   end
 
-  on agent, "puppet resource package mypkg" do
+  on(agent, puppet("resource package mypkg")) do
     assert_match( /0.0.1/, result.stdout, "err: #{agent}")
   end
 
-  on agent, "puppet resource package" do
+  on(agent, puppet("resource package")) do
     assert_match( /0.0.1/, result.stdout, "err: #{agent}")
   end
 end

@@ -10,7 +10,7 @@ step "Install repositories on target machines..." do
   repo_configs_dir = 'repo-configs'
 
   hosts.each do |host|
-    install_repos_on(host, sha, repo_configs_dir)
+    install_repos_on(host, 'puppet', sha, repo_configs_dir)
   end
 end
 
@@ -47,3 +47,6 @@ AGENT_PACKAGES = {
 
 install_packages_on(master, MASTER_PACKAGES)
 install_packages_on(agents, AGENT_PACKAGES)
+
+configure_gem_mirror(hosts)
+

@@ -40,7 +40,7 @@ describe Puppet::Forge::Repository do
         http.expects(:request).with(responds_with(:path, "the_path"))
       end
 
-      repository.make_http_request("the_path").should == result
+      expect(repository.make_http_request("the_path")).to eq(result)
     end
 
     it 'returns the result object from a request with ssl' do
@@ -49,7 +49,7 @@ describe Puppet::Forge::Repository do
         http.expects(:request).with(responds_with(:path, "the_path"))
       end
 
-      ssl_repository.make_http_request("the_path").should == result
+      expect(ssl_repository.make_http_request("the_path")).to eq(result)
     end
 
     it 'return a valid exception when there is an SSL verification problem' do
@@ -75,23 +75,23 @@ describe Puppet::Forge::Repository do
 
       request = repository.get_request_object(path)
 
-      request['User-Agent'].should =~ /\b#{agent}\b/
-      request['User-Agent'].should =~ /\bPuppet\b/
-      request['User-Agent'].should =~ /\bRuby\b/
+      expect(request['User-Agent']).to match(/\b#{agent}\b/)
+      expect(request['User-Agent']).to match(/\bPuppet\b/)
+      expect(request['User-Agent']).to match(/\bRuby\b/)
     end
 
     it "Does not set Authorization header by default" do
       Puppet.features.stubs(:pe_license?).returns(false)
       Puppet[:forge_authorization] = nil
       request = repository.get_request_object("the_path")
-      request['Authorization'].should == nil
+      expect(request['Authorization']).to eq(nil)
     end
 
     it "Sets Authorization header from config" do
       token = 'bearer some token'
       Puppet[:forge_authorization] = token
       request = repository.get_request_object("the_path")
-      request['Authorization'].should == token
+      expect(request['Authorization']).to eq(token)
     end
 
     it "escapes the received URI" do
@@ -104,29 +104,18 @@ describe Puppet::Forge::Repository do
     end
 
     def performs_an_http_request(result = nil, &block)
-      http = mock("http client")
-      yield http
-
-      proxy_class = mock("http proxy class")
-      proxy = mock("http proxy")
-      proxy_class.expects(:new).with("fake.com", 80).returns(proxy)
-      proxy.expects(:start).yields(http).returns(result)
-      Net::HTTP.expects(:Proxy).with("proxy", 1234, nil, nil).returns(proxy_class)
+      proxy_args = ["proxy", 1234, nil, nil]
+      mock_proxy(80, proxy_args, result, &block)
     end
 
     def performs_an_https_request(result = nil, &block)
-      http = mock("http client")
-      yield http
-
-      proxy_class = mock("http proxy class")
-      proxy = mock("http proxy")
-      proxy_class.expects(:new).with("fake.com", 443).returns(proxy)
-      proxy.expects(:start).yields(http).returns(result)
+      proxy_args = ["proxy", 1234, nil, nil]
+      proxy = mock_proxy(443, proxy_args, result, &block)
       proxy.expects(:use_ssl=).with(true)
       proxy.expects(:cert_store=)
       proxy.expects(:verify_mode=).with(OpenSSL::SSL::VERIFY_PEER)
-      Net::HTTP.expects(:Proxy).with("proxy", 1234, nil, nil).returns(proxy_class)
     end
+
   end
 
   describe "making a request against an authentiated proxy" do
@@ -141,7 +130,7 @@ describe Puppet::Forge::Repository do
         http.expects(:request).with(responds_with(:path, "the_path"))
       end
 
-      repository.make_http_request("the_path").should == result
+      expect(repository.make_http_request("the_path")).to eq(result)
     end
 
     it 'returns the result object from a request with ssl' do
@@ -150,7 +139,7 @@ describe Puppet::Forge::Repository do
         http.expects(:request).with(responds_with(:path, "the_path"))
       end
 
-      ssl_repository.make_http_request("the_path").should == result
+      expect(ssl_repository.make_http_request("the_path")).to eq(result)
     end
 
     it 'return a valid exception when there is an SSL verification problem' do
@@ -176,9 +165,9 @@ describe Puppet::Forge::Repository do
 
       request = repository.get_request_object(path)
 
-      request['User-Agent'].should =~ /\b#{agent}\b/
-      request['User-Agent'].should =~ /\bPuppet\b/
-      request['User-Agent'].should =~ /\bRuby\b/
+      expect(request['User-Agent']).to match(/\b#{agent}\b/)
+      expect(request['User-Agent']).to match(/\bPuppet\b/)
+      expect(request['User-Agent']).to match(/\bRuby\b/)
     end
 
     it "escapes the received URI" do
@@ -191,28 +180,16 @@ describe Puppet::Forge::Repository do
     end
 
     def performs_an_authenticated_http_request(result = nil, &block)
-      http = mock("http client")
-      yield http
-
-      proxy_class = mock("http proxy class")
-      proxy = mock("http proxy")
-      proxy_class.expects(:new).with("fake.com", 80).returns(proxy)
-      proxy.expects(:start).yields(http).returns(result)
-      Net::HTTP.expects(:Proxy).with("proxy", 1234, "user1", "password").returns(proxy_class)
+      proxy_args = ["proxy", 1234, 'user1', 'password']
+      mock_proxy(80, proxy_args, result, &block)
     end
 
     def performs_an_authenticated_https_request(result = nil, &block)
-      http = mock("http client")
-      yield http
-
-      proxy_class = mock("http proxy class")
-      proxy = mock("http proxy")
-      proxy_class.expects(:new).with("fake.com", 443).returns(proxy)
-      proxy.expects(:start).yields(http).returns(result)
+      proxy_args = ["proxy", 1234, 'user1', 'password']
+      proxy = mock_proxy(443, proxy_args, result, &block)
       proxy.expects(:use_ssl=).with(true)
       proxy.expects(:cert_store=)
       proxy.expects(:verify_mode=).with(OpenSSL::SSL::VERIFY_PEER)
-      Net::HTTP.expects(:Proxy).with("proxy", 1234, "user1", "password").returns(proxy_class)
     end
   end
 
@@ -226,5 +203,22 @@ describe Puppet::Forge::Repository do
     Puppet[:http_proxy_port] = port
     Puppet[:http_proxy_user] = user
     Puppet[:http_proxy_password] = password
+  end
+
+  def mock_proxy(port, proxy_args, result, &block)
+    http = mock("http client")
+    proxy = mock("http proxy")
+    proxy_class = mock("http proxy class")
+
+    Net::HTTP.expects(:Proxy).with(*proxy_args).returns(proxy_class)
+    proxy_class.expects(:new).with("fake.com", port).returns(proxy)
+
+    proxy.expects(:open_timeout=)
+    proxy.expects(:read_timeout=)
+
+    proxy.expects(:start).yields(http).returns(result)
+    yield http
+
+    proxy
   end
 end

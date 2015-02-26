@@ -5,7 +5,7 @@ require 'rgen/metamodel_builder'
 # This means it can load a class from a gem, or from puppet modules.
 #
 class Puppet::Pops::Types::ClassLoader
-  @autoloader = Puppet::Util::Autoload.new("ClassLoader", "", :wrap => false)
+  @autoloader = Puppet::Util::Autoload.new("ClassLoader", "")
 
   # Returns a Class given a fully qualified class name.
   # Lookup of class is never relative to the calling namespace.
@@ -89,7 +89,7 @@ class Puppet::Pops::Types::ClassLoader
     unless result.is_a?(Class)
       # Attempt to load it using the auto loader
       loaded_path = nil
-      if paths_for_name(name).find {|path| loaded_path = path; @autoloader.load(path) }
+      if paths_for_name(name_path).find {|path| loaded_path = path; @autoloader.load(path, Puppet.lookup(:current_environment)) }
         result = find_class(name_path)
         unless result.is_a?(Class)
           raise RuntimeError, "Loading of #{name} using relative path: '#{loaded_path}' did not create expected class"
@@ -110,12 +110,12 @@ class Puppet::Pops::Types::ClassLoader
     end
   end
 
-  def self.paths_for_name(fq_name)
-    [de_camel(fq_name), downcased_path(fq_name)]
-  end
-
-  def self.downcased_path(fq_name)
-    fq_name.to_s.gsub(/::/, '/').downcase
+  def self.paths_for_name(fq_named_parts)
+    # search two entries, one where all parts are decamelized, and one with names just downcased
+    # TODO:this is not perfect - it will not produce the correct mix if a mix of styles are used
+    # The alternative is to test many additional paths.
+    #
+    [fq_named_parts.map {|part| de_camel(part)}.join('/'), fq_named_parts.join('/').downcase ]
   end
 
   def self.de_camel(fq_name)

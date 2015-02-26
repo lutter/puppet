@@ -126,11 +126,6 @@ DOC
     instance
   end
 
-  def self.from_pson(pson)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(pson)
-  end
-
   # Puppet::SSL::Host is actually indirected now so the original implementation
   # has been moved into the certificate_status indirector.  This method does not
   # appear to be in use in `puppet cert -l`.
@@ -326,9 +321,7 @@ ERROR_STRING
       return if certificate
       generate
       return if certificate
-    rescue SystemExit,NoMemoryError
-      raise
-    rescue Exception => detail
+    rescue StandardError => detail
       Puppet.log_exception(detail, "Could not request certificate: #{detail.message}")
       if time < 1
         puts "Exiting; failed to retrieve certificate and waitforcert is disabled"

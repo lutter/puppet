@@ -57,8 +57,8 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
       if %r{\A[A-Za-z][A-Za-z0-9+\-\.]*://} =~ cached_source
         cached_source = File.join(tmpdir, name)
         begin
-          curl "-o", cached_source, "-C", "-", "-k", "-L", "-s", "--url", source
-          Puppet.debug "Success: curl transfered [#{name}]"
+          curl "-o", cached_source, "-C", "-", "-L", "-s", "--url", source
+          Puppet.debug "Success: curl transferred [#{name}]"
         rescue Puppet::ExecutionFailure
           Puppet.debug "curl did not transfer [#{name}].  Falling back to slower open-uri transfer methods."
           cached_source = source
@@ -73,13 +73,16 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
             entity['mount-point']
           }.select { |mountloc|; mountloc }
           begin
+            found_app = false
             mounts.each do |fspath|
               Dir.entries(fspath).select { |f|
                 f =~ /\.app$/i
               }.each do |pkg|
+                found_app = true
                 installapp("#{fspath}/#{pkg}", name, source)
               end
             end
+            Puppet.debug "Unable to find .app in .appdmg. #{name} will not be installed." if !found_app
           ensure
             hdiutil "eject", mounts[0]
           end

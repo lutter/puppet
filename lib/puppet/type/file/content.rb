@@ -4,6 +4,7 @@ require 'tempfile'
 
 require 'puppet/util/checksums'
 require 'puppet/network/http'
+require 'puppet/network/http/api/indirected_routes'
 require 'puppet/network/http/compression'
 
 module Puppet
@@ -38,6 +39,7 @@ module Puppet
 
       ...but for larger files, this attribute is more useful when combined with the
       [template](http://docs.puppetlabs.com/references/latest/function.html#template)
+      or [file](http://docs.puppetlabs.com/references/latest/function.html#file)
       function.
     EOT
 
@@ -134,7 +136,7 @@ module Puppet
     def should=(value)
       # treat the value as a bytestring, in Ruby versions that support it, regardless of the encoding
       # in which it has been supplied
-      value = value.clone.force_encoding(Encoding::ASCII_8BIT) if value.respond_to?(:force_encoding)
+      value = value.dup.force_encoding(Encoding::ASCII_8BIT) if value.respond_to?(:force_encoding)
       @resource.newattr(:checksum) unless @resource.parameter(:checksum)
       super
     end
@@ -207,11 +209,11 @@ module Puppet
 
     def get_from_source(source_or_content, &block)
       source = source_or_content.metadata.source
-      request = Puppet::Indirector::Request.new(:file_content, :find, source, nil, :environment => resource.catalog.environment)
+      request = Puppet::Indirector::Request.new(:file_content, :find, source, nil, :environment => resource.catalog.environment_instance)
 
       request.do_request(:fileserver) do |req|
         connection = Puppet::Network::HttpPool.http_instance(req.server, req.port)
-        connection.request_get(Puppet::Network::HTTP::API::V1.indirection2uri(req), add_accept_encoding({"Accept" => "raw"}), &block)
+        connection.request_get(Puppet::Network::HTTP::API::IndirectedRoutes.request_to_uri(req), add_accept_encoding({"Accept" => "binary"}), &block)
       end
     end
 

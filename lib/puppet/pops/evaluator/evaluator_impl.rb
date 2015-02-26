@@ -30,10 +30,6 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
   include Puppet::Pops::Evaluator::Runtime3Support
   include Puppet::Pops::Evaluator::ExternalSyntaxSupport
 
-  # This constant is not defined as Float::INFINITY in Ruby 1.8.7 (but is available in later version
-  # Refactor when support is dropped for Ruby 1.8.7.
-  #
-  INFINITY = 1.0 / 0.0
   EMPTY_STRING = ''.freeze
   COMMA_SEPARATOR = ', '.freeze
 
@@ -53,9 +49,6 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
 
     @@compare_operator     ||= Puppet::Pops::Evaluator::CompareOperator.new()
     @@relationship_operator ||= Puppet::Pops::Evaluator::RelationshipOperator.new()
-
-    # Initialize the runtime module
-    Puppet::Pops::Evaluator::Runtime3Support.instance_method(:initialize).bind(self).call()
   end
 
   # @api private
@@ -328,7 +321,7 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
       rescue ZeroDivisionError => e
         fail(Issues::DIV_BY_ZERO, right_o)
       end
-      if result == INFINITY || result == -INFINITY
+      if result == Float::INFINITY || result == -Float::INFINITY
         fail(Issues::RESULT_IS_INFINITY, left_o, {:operator => operator})
       end
       result
@@ -562,26 +555,12 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
     end
   end
 
-  # Evaluates a CollectExpression by transforming it into a 3x AST::Collection and then evaluating that.
-  # This is done because of the complex API between compiler, indirector, backends, and difference between
-  # collecting virtual resources and exported resources.
+  # Evaluates a CollectExpression by creating a collector transformer. The transformer
+  # will evaulate the collection, create the appropriate collector, and hand it off
+  # to the compiler to collect the resources specified by the query.
   #
   def eval_CollectExpression o, scope
-    # The Collect Expression and its contained query expressions are implemented in such a way in
-    # 3x that it is almost impossible to do anything about them (the AST objects are lazily evaluated,
-    # and the built structure consists of both higher order functions and arrays with query expressions
-    # that are either used as a predicate filter, or given to an indirection terminus (such as the Puppet DB
-    # resource terminus). Unfortunately, the 3x implementation has many inconsistencies that the implementation
-    # below carries forward.
-    #
-    collect_3x = Puppet::Pops::Model::AstTransformer.new().transform(o)
-    collected = collect_3x.evaluate(scope)
-    # the 3x returns an instance of Parser::Collector (but it is only registered with the compiler at this
-    # point and does not contain any valuable information (like the result)
-    # Dilemma: If this object is returned, it is a first class value in the Puppet Language and we
-    # need to be able to perform operations on it. We can forbid it from leaking by making CollectExpression
-    # a non R-value. This makes it possible for the evaluator logic to make use of the Collector.
-    collected
+    Puppet::Pops::Evaluator::CollectorTransformer.new().transform(o,scope)
   end
 
   def eval_ParenthesizedExpression(o, scope)
@@ -615,17 +594,22 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
     if (tmp_name = o.type_name).is_a?(Puppet::Pops::Model::QualifiedName)
       tmp_name.value # already validated as a name
     else
+      type_name_acceptable =
+      case o.type_name
+      when Puppet::Pops::Model::QualifiedReference
+        true
+      when Puppet::Pops::Model::AccessExpression
+        o.type_name.left_expr.is_a?(Puppet::Pops::Model::QualifiedReference)
+      end
+
       evaluated_name = evaluate(tmp_name, scope)
+      unless type_name_acceptable
+        actual = type_calculator.generalize!(type_calculator.infer(evaluated_name)).to_s
+        fail(Puppet::Pops::Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual => actual})
+      end
 
-      # must be String or Resource Type
+      # must be a CatalogEntry subtype
       case evaluated_name
-      when String
-        resulting_name = evaluated_name.downcase
-        if resulting_name !~ Puppet::Pops::Patterns::CLASSREF
-          fail(Puppet::Pops::Issues::ILLEGAL_CLASSREF, o.type_name, {:name=>resulting_name})
-        end
-        resulting_name
-
       when Puppet::Pops::Types::PHostClassType
         unless evaluated_name.class_name.nil?
           fail(Puppet::Pops::Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual=> evaluated_name.to_s})
@@ -646,7 +630,6 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
 
     # This is a runtime check - the model is valid, but will have runtime issues when evaluated
     # and storeconfigs is not set.
-    #if acceptor.will_accept?(Issues::RT_NO_STORECONFIGS) && o.exported
     if(o.exported)
       optionally_fail(Puppet::Pops::Issues::RT_NO_STORECONFIGS_EXPORT, o);
     end
@@ -698,7 +681,12 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
       body_to_params[body] = body.operations.reduce({}) do |param_memo, op|
         params = evaluate(op, scope)
         params = [params] unless params.is_a?(Array)
-        params.each { |p| param_memo[p.name] = p }
+        params.each do |p|
+          if param_memo.include? p.name
+            fail(Puppet::Pops::Issues::DUPLICATE_ATTRIBUTE, o, {:attribute => p.name})
+          end
+          param_memo[p.name] = p
+        end
         param_memo
       end
     end
@@ -786,7 +774,7 @@ class Puppet::Pops::Evaluator::EvaluatorImpl
     name = o.functor_expr.right_expr
     unless name.is_a? Puppet::Pops::Model::QualifiedName
       fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, {:feature=>'function name', :container => o})
-    end 
+    end
     name = name.value # the string function name
 
     evaluated_arguments = unfold([receiver], o.arguments || [], scope)

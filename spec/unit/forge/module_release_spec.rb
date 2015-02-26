@@ -47,11 +47,9 @@ describe Puppet::Forge::ModuleRelease do
     end
 
     describe '#tmpfile' do
-
-      # This is impossible to test under Ruby 1.8.x, but should also occur there.
-      it 'should be opened in binary mode', :unless => RUBY_VERSION >= '1.8.7' do
+      it 'should be opened in binary mode' do
         Puppet::Forge::Cache.stubs(:base_path).returns(Dir.tmpdir)
-        release.send(:tmpfile).binmode?.should be_true
+        expect(release.send(:tmpfile).binmode?).to be_truthy
       end
     end
 

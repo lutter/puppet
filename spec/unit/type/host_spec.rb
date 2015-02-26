@@ -13,62 +13,62 @@ describe host do
   end
 
   it "should have :name be its namevar" do
-    @class.key_attributes.should == [:name]
+    expect(@class.key_attributes).to eq([:name])
   end
 
   describe "when validating attributes" do
     [:name, :provider ].each do |param|
       it "should have a #{param} parameter" do
-        @class.attrtype(param).should == :param
+        expect(@class.attrtype(param)).to eq(:param)
       end
     end
 
     [:ip, :target, :host_aliases, :comment, :ensure].each do |property|
       it "should have a #{property} property" do
-        @class.attrtype(property).should == :property
+        expect(@class.attrtype(property)).to eq(:property)
       end
     end
 
     it "should have a list host_aliases" do
-      @class.attrclass(:host_aliases).ancestors.should be_include(Puppet::Property::OrderedList)
+      expect(@class.attrclass(:host_aliases).ancestors).to be_include(Puppet::Property::OrderedList)
     end
 
   end
 
   describe "when validating values" do
     it "should support present as a value for ensure" do
-      proc { @class.new(:name => "foo", :ensure => :present) }.should_not raise_error
+      expect { @class.new(:name => "foo", :ensure => :present) }.not_to raise_error
     end
 
     it "should support absent as a value for ensure" do
-      proc { @class.new(:name => "foo", :ensure => :absent) }.should_not raise_error
+      expect { @class.new(:name => "foo", :ensure => :absent) }.not_to raise_error
     end
 
     it "should accept IPv4 addresses" do
-      proc { @class.new(:name => "foo", :ip => '10.96.0.1') }.should_not raise_error
+      expect { @class.new(:name => "foo", :ip => '10.96.0.1') }.not_to raise_error
     end
 
     it "should accept long IPv6 addresses" do
       # Taken from wikipedia article about ipv6
-      proc { @class.new(:name => "foo", :ip => '2001:0db8:85a3:08d3:1319:8a2e:0370:7344') }.should_not raise_error
+      expect { @class.new(:name => "foo", :ip => '2001:0db8:85a3:08d3:1319:8a2e:0370:7344') }.not_to raise_error
     end
 
     it "should accept one host_alias" do
-      proc { @class.new(:name => "foo", :host_aliases => 'alias1') }.should_not raise_error
+      expect { @class.new(:name => "foo", :host_aliases => 'alias1') }.not_to raise_error
     end
 
     it "should accept multiple host_aliases" do
-      proc { @class.new(:name => "foo", :host_aliases => [ 'alias1', 'alias2' ]) }.should_not raise_error
+      expect { @class.new(:name => "foo", :host_aliases => [ 'alias1', 'alias2' ]) }.not_to raise_error
     end
 
     it "should accept shortened IPv6 addresses" do
-      proc { @class.new(:name => "foo", :ip => '2001:db8:0:8d3:0:8a2e:70:7344') }.should_not raise_error
-      proc { @class.new(:name => "foo", :ip => '::ffff:192.0.2.128') }.should_not raise_error
-      proc { @class.new(:name => "foo", :ip => '::1') }.should_not raise_error
+      expect { @class.new(:name => "foo", :ip => '2001:db8:0:8d3:0:8a2e:70:7344') }.not_to raise_error
+      expect { @class.new(:name => "foo", :ip => '::ffff:192.0.2.128') }.not_to raise_error
+      expect { @class.new(:name => "foo", :ip => '::1') }.not_to raise_error
     end
 
     it "should not accept malformed IPv4 addresses like 192.168.0.300" do
-      proc { @class.new(:name => "foo", :ip => '192.168.0.300') }.should raise_error
+      expect { @class.new(:name => "foo", :ip => '192.168.0.300') }.to raise_error
     end
 
     it "should reject over-long IPv4 addresses" do
@@ -76,7 +76,7 @@ describe host do
     end
 
     it "should not accept malformed IP addresses like 2001:0dg8:85a3:08d3:1319:8a2e:0370:7344" do
-      proc { @class.new(:name => "foo", :ip => '2001:0dg8:85a3:08d3:1319:8a2e:0370:7344') }.should raise_error
+      expect { @class.new(:name => "foo", :ip => '2001:0dg8:85a3:08d3:1319:8a2e:0370:7344') }.to raise_error
     end
 
     # Assorted, annotated IPv6 passes.
@@ -602,16 +602,32 @@ describe host do
       end
     end
 
+    it "should not accept newlines in resourcename" do
+      expect { @class.new(:name => "fo\no", :ip => '127.0.0.1' ) }.to  raise_error(Puppet::ResourceError, /Hostname cannot include newline/)
+    end
+
+    it "should not accept newlines in ipaddress" do
+      expect { @class.new(:name => "foo", :ip => "127.0.0.1\n") }.to raise_error(Puppet::ResourceError, /Invalid IP address/)
+    end
+
+    it "should not accept newlines in host_aliases" do
+      expect { @class.new(:name => "foo", :ip => '127.0.0.1', :host_aliases => [ 'well_formed', "thisalias\nhavenewline" ] ) }.to raise_error(Puppet::ResourceError, /Host aliases cannot include whitespace/)
+    end
+
+    it "should not accept newlines in comment" do
+      expect { @class.new(:name => "foo", :ip => '127.0.0.1', :comment => "Test of comment blah blah \n test 123" ) }.to raise_error(Puppet::ResourceError, /Comment cannot include newline/)
+    end
+
     it "should not accept spaces in resourcename" do
-      proc { @class.new(:name => "foo bar") }.should raise_error
+      expect { @class.new(:name => "foo bar") }.to raise_error(Puppet::ResourceError, /Invalid host name/)
     end
 
     it "should not accept host_aliases with spaces" do
-      proc { @class.new(:name => "foo", :host_aliases => [ 'well_formed', 'not wellformed' ]) }.should raise_error
+      expect { @class.new(:name => "foo", :host_aliases => [ 'well_formed', 'not wellformed' ]) }.to raise_error(Puppet::ResourceError, /Host aliases cannot include whitespace/)
     end
 
     it "should not accept empty host_aliases" do
-      proc { @class.new(:name => "foo", :host_aliases => ['alias1','']) }.should raise_error
+      expect { @class.new(:name => "foo", :host_aliases => ['alias1','']) }.to raise_error(Puppet::ResourceError, /Host aliases cannot be an empty string/)
     end
   end
 
@@ -622,7 +638,7 @@ describe host do
 
       @ip.sync
 
-      @provider.ip.should == '192.168.0.1'
+      expect(@provider.ip).to eq('192.168.0.1')
     end
 
     it "should send the first value to the provider for comment property" do
@@ -630,7 +646,7 @@ describe host do
 
       @comment.sync
 
-      @provider.comment.should == 'Bazinga'
+      expect(@provider.comment).to eq('Bazinga')
     end
 
     it "should send the joined array to the provider for host_alias" do
@@ -638,7 +654,7 @@ describe host do
 
       @host_aliases.sync
 
-      @provider.host_aliases.should == 'foo bar'
+      expect(@provider.host_aliases).to eq('foo bar')
     end
 
     it "should also use the specified delimiter for joining" do
@@ -647,18 +663,18 @@ describe host do
 
       @host_aliases.sync
 
-      @provider.host_aliases.should == "foo\tbar"
+      expect(@provider.host_aliases).to eq("foo\tbar")
     end
 
     it "should care about the order of host_aliases" do
       @host_aliases = @class.attrclass(:host_aliases).new(:resource => @resource, :should => %w{foo bar})
-      @host_aliases.insync?(%w{foo bar}).should == true
-      @host_aliases.insync?(%w{bar foo}).should == false
+      expect(@host_aliases.insync?(%w{foo bar})).to eq(true)
+      expect(@host_aliases.insync?(%w{bar foo})).to eq(false)
     end
 
     it "should not consider aliases to be in sync if should is a subset of current" do
       @host_aliases = @class.attrclass(:host_aliases).new(:resource => @resource, :should => %w{foo bar})
-      @host_aliases.insync?(%w{foo bar anotherone}).should == false
+      expect(@host_aliases.insync?(%w{foo bar anotherone})).to eq(false)
     end
 
   end

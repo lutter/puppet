@@ -25,11 +25,6 @@ class Puppet::Transaction::Event
     obj
   end
 
-  def self.from_pson(data)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(data)
-  end
-
   def initialize(options = {})
     @audited = false
 
@@ -86,6 +81,10 @@ class Puppet::Transaction::Event
 
   def to_s
     message
+  end
+
+  def inspect
+    %Q(#<#{self.class.name} @name="#{@name.inspect}" @message="#{@message.inspect}">)
   end
 
   def to_yaml_properties

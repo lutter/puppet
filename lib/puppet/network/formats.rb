@@ -23,12 +23,12 @@ end
 
 Puppet::Network::FormatHandler.create_serialized_formats(:yaml) do
   def intern(klass, text)
-    data = YAML.load(text, :safe => true, :deserialize_symbols => true)
+    data = YAML.load(text)
     data_to_instance(klass, data)
   end
 
   def intern_multiple(klass, text)
-    data = YAML.load(text, :safe => true, :deserialize_symbols => true)
+    data = YAML.load(text)
     unless data.respond_to?(:collect)
       raise Puppet::Network::FormatHandler::FormatError, "Serialized YAML did not contain a collection of instances when calling intern_multiple"
     end
@@ -62,63 +62,9 @@ Puppet::Network::FormatHandler.create_serialized_formats(:yaml) do
   end
 end
 
-# This is a "special" format which is used for the moment only when sending facts
-# as REST GET parameters (see Puppet::Configurer::FactHandler).
-# This format combines a yaml serialization, then zlib compression and base64 encoding.
-Puppet::Network::FormatHandler.create_serialized_formats(:b64_zlib_yaml) do
-  require 'base64'
-
-  def use_zlib?
-    Puppet.features.zlib? && Puppet[:zlib]
-  end
-
-  def requiring_zlib
-    if use_zlib?
-      yield
-    else
-      raise Puppet::Error, "the zlib library is not installed or is disabled."
-    end
-  end
-
-  def intern(klass, text)
-    requiring_zlib do
-      Puppet::Network::FormatHandler.format(:yaml).intern(klass, decode(text))
-    end
-  end
-
-  def intern_multiple(klass, text)
-    requiring_zlib do
-      Puppet::Network::FormatHandler.format(:yaml).intern_multiple(klass, decode(text))
-    end
-  end
-
-  def render(instance)
-    encode(instance.to_yaml)
-  end
-
-  def render_multiple(instances)
-    encode(instances.to_yaml)
-  end
-
-  def supported?(klass)
-    true
-  end
-
-  def decode(data)
-    Zlib::Inflate.inflate(Base64.decode64(data))
-  end
-
-  def encode(text)
-    requiring_zlib do
-      Base64.encode64(Zlib::Deflate.deflate(text, Zlib::BEST_COMPRESSION))
-    end
-  end
-end
-
 Puppet::Network::FormatHandler.create(:s, :mime => "text/plain", :extension => "txt")
 
-# A very low-weight format so it'll never get chosen automatically.
-Puppet::Network::FormatHandler.create(:raw, :mime => "application/x-raw", :weight => 1) do
+Puppet::Network::FormatHandler.create(:binary, :mime => "application/octet-stream", :weight => 1) do
   def intern_multiple(klass, text)
     raise NotImplementedError
   end
@@ -154,10 +100,8 @@ Puppet::Network::FormatHandler.create_serialized_formats(:pson, :weight => 10, :
     instances.to_pson
   end
 
-  # If they pass class information, we want to ignore it.  By default,
-  # we'll include class information but we won't rely on it - we don't
-  # want class names to be required because we then can't change our
-  # internal class names, which is bad.
+  # If they pass class information, we want to ignore it.
+  # This is required for compatibility with Puppet 3.x
   def data_to_instance(klass, data)
     if data.is_a?(Hash) and d = data['data']
       data = d

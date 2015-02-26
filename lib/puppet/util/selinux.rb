@@ -62,7 +62,7 @@ module Puppet::Util::SELinux
     if context.nil? or context == "unlabeled"
       return nil
     end
-    unless context =~ /^([a-z0-9_]+):([a-z0-9_]+):([a-zA-Z0-9_]+)(?::([a-zA-Z0-9:,._-]+))?/
+    unless context =~ /^([^\s:]+):([^\s:]+):([^\s:]+)(?::([\sa-zA-Z0-9:,._-]+))?$/
       raise Puppet::Error, "Invalid context to parse: #{context}"
     end
     ret = {
@@ -105,7 +105,7 @@ module Puppet::Util::SELinux
         when :selrange
           context[3] = value
         else
-          raise ArguementError, "set_selinux_context component must be one of :seluser, :selrole, :seltype, or :selrange"
+          raise ArgumentError, "set_selinux_context component must be one of :seluser, :selrole, :seltype, or :selrange"
       end
       context = context.join(':')
     else

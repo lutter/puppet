@@ -41,7 +41,6 @@ module Puppet
     module Model
       require 'puppet/pops/model/tree_dumper'
       require 'puppet/pops/model/ast_transformer'
-      require 'puppet/pops/model/ast_tree_dumper'
       require 'puppet/pops/model/factory'
       require 'puppet/pops/model/model_tree_dumper'
       require 'puppet/pops/model/model_label_provider'
@@ -87,6 +86,7 @@ module Puppet
       require 'puppet/pops/parser/lexer2'
       require 'puppet/pops/parser/evaluating_parser'
       require 'puppet/pops/parser/epp_parser'
+      require 'puppet/pops/parser/code_merger'
     end
 
     module Validation
@@ -96,10 +96,18 @@ module Puppet
 
     module Evaluator
       require 'puppet/pops/evaluator/callable_signature'
+      require 'puppet/pops/evaluator/runtime3_converter'
       require 'puppet/pops/evaluator/runtime3_support'
       require 'puppet/pops/evaluator/evaluator_impl'
       require 'puppet/pops/evaluator/epp_evaluator'
       require 'puppet/pops/evaluator/callable_mismatch_describer'
+      require 'puppet/pops/evaluator/collector_transformer'
+      module Collectors
+        require 'puppet/pops/evaluator/collectors/abstract_collector'
+        require 'puppet/pops/evaluator/collectors/fixed_set_collector'
+        require 'puppet/pops/evaluator/collectors/catalog_collector'
+        require 'puppet/pops/evaluator/collectors/exported_collector'
+      end
     end
 
     # Subsystem for puppet functions defined in ruby.
@@ -116,3 +124,4 @@ module Puppet
   require 'puppet/bindings'
   require 'puppet/functions'
 end
+require 'puppet/plugins/data_providers'

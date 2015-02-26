@@ -3,10 +3,8 @@ require 'spec_helper'
 require 'puppet/face'
 
 describe Puppet::Face[:file, '0.0.1'] do
-  it_should_behave_like "an indirector face"
-
-  [:download, :store].each do |action|
-    it { should be_action action }
-    it { should respond_to action }
+  [:download, :store, :find, :info, :save].each do |action|
+    it { is_expected.to be_action action }
+    it { is_expected.to respond_to action }
   end
 end

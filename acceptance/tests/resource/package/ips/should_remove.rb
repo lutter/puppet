@@ -1,5 +1,5 @@
 test_name "Package:IPS basic tests"
-confine :to, :platform => 'solaris'
+confine :to, :platform => 'solaris-11'
 
 require 'puppet/acceptance/solaris_util'
 extend Puppet::Acceptance::IPSUtils
@@ -24,9 +24,7 @@ agents.each do |agent|
   end
 
   step "IPS: ensure removed."
-  apply_manifest_on(agent, 'package {mypkg : ensure=>absent}') do
-    assert_match( /Finished catalog run in .*/, result.stdout, "err: #{agent}")
-  end
+  apply_manifest_on(agent, 'package {mypkg : ensure=>absent}')
 
   on(agent, "pkg list -v mypkg", :acceptable_exit_codes => [1]) do
     assert_no_match( /mypkg@0.0.1/, result.stdout, "err: #{agent}")

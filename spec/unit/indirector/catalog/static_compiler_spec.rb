@@ -35,12 +35,12 @@ describe Puppet::Resource::Catalog::StaticCompiler do
 
   describe "#find" do
     it "returns a catalog" do
-      subject.find(request).should be_a_kind_of(Puppet::Resource::Catalog)
+      expect(subject.find(request)).to be_a_kind_of(Puppet::Resource::Catalog)
     end
 
     it "returns nil if there is no compiled catalog" do
       subject.expects(:compile).returns(nil)
-      subject.find(request).should be_nil
+      expect(subject.find(request)).to be_nil
     end
 
     describe "a catalog with file resources containing source parameters with puppet:// URIs" do
@@ -49,8 +49,8 @@ describe Puppet::Resource::Catalog::StaticCompiler do
         resource_catalog = subject.find(request)
         resource_catalog.resources.each do |resource|
           next unless resource.type == "File"
-          resource[:content].should == "{md5}361fadf1c712e812d198c4cab5712a79"
-          resource[:source].should be_nil
+          expect(resource[:content]).to eq("{md5}361fadf1c712e812d198c4cab5712a79")
+          expect(resource[:source]).to be_nil
         end
       end
 
@@ -60,8 +60,8 @@ describe Puppet::Resource::Catalog::StaticCompiler do
         resource_catalog = subject.find(request)
         resource_catalog.resources.each do |resource|
           next unless resource.type == "File"
-          resource[:content].should be_nil
-          resource[:source].should == uri
+          expect(resource[:content]).to be_nil
+          expect(resource[:source]).to eq(uri)
         end
       end
 
@@ -70,9 +70,9 @@ describe Puppet::Resource::Catalog::StaticCompiler do
         resource_catalog = subject.find(request)
         resource_catalog.resources.each do |resource|
           next unless resource.type == "File"
-          resource[:owner].should == 0
-          resource[:group].should == 0
-          resource[:mode].should  == 420
+          expect(resource[:owner]).to eq(0)
+          expect(resource[:group]).to eq(0)
+          expect(resource[:mode]).to  eq(420)
         end
       end
     end
@@ -112,8 +112,8 @@ describe Puppet::Resource::Catalog::StaticCompiler do
       # Ensure all of the file resources were filtered
       resource_catalog.resources.each do |resource|
         next unless resource.type == "File"
-        resource[:content].should == "{md5}361fadf1c712e812d198c4cab5712a79"
-        resource[:source].should be_nil
+        expect(resource[:content]).to eq("{md5}361fadf1c712e812d198c4cab5712a79")
+        expect(resource[:source]).to be_nil
       end
     end
   end
@@ -139,7 +139,8 @@ describe Puppet::Resource::Catalog::StaticCompiler do
     options[:request] ||= request
 
     # Build a catalog suitable for the static compiler to operate on
-    catalog = Puppet::Resource::Catalog.new("#{options[:request].key}", Puppet::Node::Environment.remote(:testing))
+    environment = Puppet::Node::Environment.remote(:testing)
+    catalog = Puppet::Resource::Catalog.new("#{options[:request].key}", environment)
 
     # Mock out the fileserver, otherwise converting the catalog to a
     fake_fileserver_metadata = fileserver_metadata(options)
@@ -150,7 +151,7 @@ describe Puppet::Resource::Catalog::StaticCompiler do
       indirection.stubs(:find).with do |uri, opts|
         expect(uri).to eq options[:source].sub('puppet:///','')
         expect(opts[:links]).to eq :manage
-        expect(opts[:environment]).to eq "testing"
+        expect(opts[:environment]).to eq environment
       end.returns(fake_fileserver_metadata)
 
     # I want a resource that all the file resources require and another
@@ -201,14 +202,14 @@ describe Puppet::Resource::Catalog::StaticCompiler do
 
     it "should return the same catalog if it doesn't support filtering" do
       catalog.stubs(:respond_to?).with(:filter)
-      subject.filter(catalog).should == catalog
+      expect(subject.filter(catalog)).to eq(catalog)
     end
 
     it "should return the filtered catalog" do
       filtered_catalog = stub 'filtered catalog'
       catalog.stubs(:filter).returns(filtered_catalog)
 
-      subject.filter(catalog).should == filtered_catalog
+      expect(subject.filter(catalog)).to eq(filtered_catalog)
     end
 
   end

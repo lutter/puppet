@@ -108,6 +108,12 @@ class Puppet::Transaction::ResourceHarness
     end
   end
 
+  # allow_changes? is only made public to enable the existing spec tests to run
+  # under rspec 3 (apparently rspec 2 didn't enforce access controls?). Please do not
+  # treat this as part of a public API.
+  # Possible future improvement: rewrite to not require access to private methods.
+  public :allow_changes?
+
   def sync_if_needed(param, context)
     historical_value = context.historical_values[param.name]
     current_value = context.current_values[param.name]
@@ -170,8 +176,7 @@ class Puppet::Transaction::ResourceHarness
   # For audit purposes, this code special cases this comparison, and compares
   # the two objects by their second and microsecond components. tv_sec is the
   # number of seconds since the epoch, and tv_usec is only the microsecond
-  # portion of time.  This compare satisfies compatibility requirements for
-  # Ruby 1.8.7, where to_r does not exist on the Time class.
+  # portion of time.
   def are_audited_values_equal(a, b)
     a == b || (a.is_a?(Time) && b.is_a?(Time) && a.tv_sec == b.tv_sec && a.tv_usec == b.tv_usec)
   end

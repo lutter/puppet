@@ -131,6 +131,9 @@ class Puppet::Pops::Parser::Lexer2
     "type"     => [:TYPE,     'type',     4],
     "attr"     => [:ATTR,     'attr',     4],
     "private"  => [:PRIVATE,  'private',  7],
+    "application" => [:APPLICATION, 'application', 11],
+    "produces" => [:PRODUCES, 'produces', 8],
+    "consumes" => [:CONSUMES, 'consumes', 8]
   }
   KEYWORDS.each {|k,v| v[1].freeze; v.freeze }
   KEYWORDS.freeze
@@ -141,6 +144,7 @@ class Puppet::Pops::Parser::Lexer2
   KEYWORD_NAMES.freeze
 
   PATTERN_WS        = %r{[[:blank:]\r]+}
+  PATTERN_NON_WS    = %r{\w+\b?}
 
   # The single line comment includes the line ending.
   PATTERN_COMMENT   = %r{#.*\r?}
@@ -305,14 +309,13 @@ class Puppet::Pops::Parser::Lexer2
     la = scn.peek(3)
     return nil if la.empty?
 
-    # Ruby 1.8.7 requires using offset and length (or integers are returned.
     # PERFORMANCE NOTE.
     # It is slightly faster to use these local variables than accessing la[0], la[1] etc. in ruby 1.9.3
     # But not big enough to warrant two completely different implementations.
     #
-    la0 = la[0,1]
-    la1 = la[1,1]
-    la2 = la[2,1]
+    la0 = la[0]
+    la1 = la[1]
+    la2 = la[2]
 
     # PERFORMANCE NOTE:
     # A case when, where all the cases are literal values is the fastest way to map from data to code.
@@ -329,7 +332,7 @@ class Puppet::Pops::Parser::Lexer2
       emit(TOKEN_COMMA, before)
 
     when '['
-      if (before == 0 || scn.string[before-1,1] =~ /[[:blank:]\r\n]+/)
+      if (before == 0 || scn.string[locator.char_offset(before)-1,1] =~ /[[:blank:]\r\n]+/)
         emit(TOKEN_LISTSTART, before)
       else
         emit(TOKEN_LBRACK, before)
@@ -574,8 +577,9 @@ class Puppet::Pops::Parser::Lexer2
         emit_completed([:NUMBER, value.freeze, length], before)
       else
         # move to faulty position ([0-9] was ok)
-        scn.pos = scn.pos + 1
-        lex_error("Illegal number")
+        invalid_number = scn.scan_until(PATTERN_NON_WS)
+        scn.pos = before + 1
+        lex_error("Illegal number '#{invalid_number}'")
       end
 
     when 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -685,7 +689,7 @@ class Puppet::Pops::Parser::Lexer2
       true
 
     # Operands (that can be followed by DIV (even if illegal in grammar)
-    when :NAME, :CLASSREF, :NUMBER, :STRING, :BOOLEAN, :DQPRE, :DQMID, :DQPOST, :HEREDOC, :REGEX
+    when :NAME, :CLASSREF, :NUMBER, :STRING, :BOOLEAN, :DQPRE, :DQMID, :DQPOST, :HEREDOC, :REGEX, :VARIABLE, :WORD
       false
 
     else

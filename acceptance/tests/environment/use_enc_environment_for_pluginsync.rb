@@ -11,33 +11,46 @@ YAML
 END
 on master, "chmod 755 #{testdir}/enc.rb"
 
+apply_manifest_on(master, <<-MANIFEST, :catch_failures => true)
+  File {
+    ensure => directory,
+    mode => "0770",
+    owner => #{master.puppet['user']},
+    group => #{master.puppet['group']},
+  }
+  file {
+    '#{testdir}/environments':;
+    '#{testdir}/environments/production':;
+    '#{testdir}/environments/special/':;
+    '#{testdir}/environments/special/modules':;
+    '#{testdir}/environments/special/modules/amod':;
+    '#{testdir}/environments/special/modules/amod/lib':;
+    '#{testdir}/environments/special/modules/amod/lib/puppet':;
+  }
+  file { '#{testdir}/environments/special/modules/amod/lib/puppet/foo.rb':
+    ensure => file,
+    mode => "0640",
+    content => "#special_version",
+  }
+MANIFEST
+
 master_opts = {
+  'main' => {
+    'environmentpath' => "#{testdir}/environments",
+  },
   'master' => {
     'node_terminus' => 'exec',
     'external_nodes' => "#{testdir}/enc.rb"
   },
-  'special' => {
-    'modulepath' => "#{testdir}/special"
-  }
 }
-if master.is_pe?
-  master_opts['special']['modulepath'] << ":#{master['sitemoduledir']}"
-end
-
-on master, "mkdir -p #{testdir}/modules"
-# Create a plugin file on the master
-on master, "mkdir -p #{testdir}/special/amod/lib/puppet"
-create_remote_file(master, "#{testdir}/special/amod/lib/puppet/foo.rb", "#special_version")
-
-on master, "chown -R #{master['user']}:#{master['group']} #{testdir}"
-on master, "chmod -R g+rwX #{testdir}"
 
 with_puppet_running_on master, master_opts, testdir do
 
   agents.each do |agent|
+    agent_vardir = agent.puppet['vardir']
     run_agent_on(agent, "--no-daemonize --onetime --server #{master}")
-    on agent, "cat \"#{agent.puppet['vardir']}/lib/puppet/foo.rb\""
+    on agent, "cat \"#{agent_vardir}/lib/puppet/foo.rb\""
     assert_match(/#special_version/, stdout, "The plugin from environment 'special' was not synced")
-    on agent, "rm -rf \"#{agent.puppet['vardir']}/lib\""
+    on agent, "rm -rf \"#{agent_vardir}/lib\""
   end
 end

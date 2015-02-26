@@ -14,6 +14,8 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   confine :any => [
     Facter.value(:operatingsystem) == 'Ubuntu',
     (Facter.value(:osfamily) == 'RedHat' and Facter.value(:operatingsystemrelease) =~ /^6\./),
+    Facter.value(:operatingsystem) == 'Amazon',
+    Facter.value(:operatingsystem) == 'LinuxMint',
   ]
 
   defaultfor :operatingsystem => :ubuntu
@@ -151,7 +153,11 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def status
-    return super if not is_upstart?
+    if (@resource[:hasstatus] == :false) ||
+        @resource[:status] ||
+        ! is_upstart?
+      return super
+    end
 
     output = status_exec(@resource[:name].split)
     if output =~ /start\//
@@ -348,8 +354,8 @@ private
   end
 
   def write_script_to(file, text)
-    Puppet::Util.replace_file(file, 0644) do |file|
-      file.write(text)
+    Puppet::Util.replace_file(file, 0644) do |f|
+      f.write(text)
     end
   end
 end

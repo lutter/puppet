@@ -2,6 +2,10 @@ test_name "puppet module install (agent)"
 require 'puppet/acceptance/module_utils'
 extend Puppet::Acceptance::ModuleUtils
 
+hosts.each do |host|
+  skip_test "skip tests requiring forge certs on solaris and aix" if host['platform'] =~ /solaris/
+end
+
 module_author = "pmtacceptance"
 module_name   = "nginx"
 module_dependencies = []
@@ -15,11 +19,9 @@ agents.each do |agent|
   step 'setup'
   stub_forge_on(agent)
 
-  distmoduledir = on(agent, puppet("agent", "--configprint", "confdir")).stdout.chomp + "/modules"
-
   step "install module '#{module_author}-#{module_name}'"
   on(agent, puppet("module install #{module_author}-#{module_name}")) do
     assert_module_installed_ui(stdout, module_author, module_name)
   end
-  assert_module_installed_on_disk(agent, distmoduledir, module_name)
+  assert_module_installed_on_disk(agent, module_name)
 end

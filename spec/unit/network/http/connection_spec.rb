@@ -1,7 +1,6 @@
 #! /usr/bin/env ruby
 require 'spec_helper'
 require 'puppet/network/http/connection'
-require 'puppet/network/authentication'
 
 describe Puppet::Network::HTTP::Connection do
 
@@ -70,7 +69,7 @@ describe Puppet::Network::HTTP::Connection do
           subject.send(method, "/foo", {}) do |response|
             block_executed = true
           end
-          block_executed.should == true
+          expect(block_executed).to eq(true)
         end
       end
     end
@@ -144,7 +143,7 @@ describe Puppet::Network::HTTP::Connection do
         connection.get('request')
       end.to raise_error(Puppet::Error) do |error|
         error.message =~ /Server hostname 'my_server' did not match server certificate; expected one of (.+)/
-        $1.split(', ').should =~ %w[DNS:foo DNS:bar DNS:baz DNS:not_my_server not_my_server]
+        expect($1.split(', ')).to match_array(%w[DNS:foo DNS:bar DNS:baz DNS:not_my_server not_my_server])
       end
     end
 
@@ -169,8 +168,6 @@ describe Puppet::Network::HTTP::Connection do
 
       Net::HTTP.any_instance.stubs(:start)
       Net::HTTP.any_instance.stubs(:request).returns(httpok)
-
-      connection.expects(:warn_if_near_expiration).with(cert)
 
       connection.get('request')
     end

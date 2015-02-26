@@ -11,7 +11,6 @@ end
 
 require 'puppet'
 require 'puppet/util'
-require "puppet/util/plugins"
 require "puppet/util/rubygems"
 require "puppet/util/limits"
 require 'puppet/util/colors'
@@ -24,7 +23,7 @@ module Puppet
     class CommandLine
       include Puppet::Util::Limits
 
-      OPTION_OR_MANIFEST_FILE = /^-|\.pp$|\.rb$/
+      OPTION_OR_MANIFEST_FILE = /^-|\.pp$/
 
       # @param zero [String] the name of the executable
       # @param argv [Array<String>] the arguments passed on the command line
@@ -32,7 +31,6 @@ module Puppet
       def initialize(zero = $0, argv = ARGV, stdin = STDIN)
         @command = File.basename(zero, '.rb')
         @argv = argv
-        Puppet::Plugins.on_commandline_initialization(:command_line_object => self)
       end
 
       # @return [String] name of the subcommand is being executed
@@ -57,24 +55,6 @@ module Puppet
         else
           @argv[1..-1]
         end
-      end
-
-      # @api private
-      # @deprecated
-      def self.available_subcommands
-        Puppet.deprecation_warning('Puppet::Util::CommandLine.available_subcommands is deprecated; please use Puppet::Application.available_application_names instead.')
-        Puppet::Application.available_application_names
-      end
-
-      # available_subcommands was previously an instance method, not a class
-      # method, and we have an unknown number of user-implemented applications
-      # that depend on that behaviour.  Forwarding allows us to preserve a
-      # backward compatible API. --daniel 2011-04-11
-      # @api private
-      # @deprecated
-      def available_subcommands
-        Puppet.deprecation_warning('Puppet::Util::CommandLine#available_subcommands is deprecated; please use Puppet::Application.available_application_names instead.')
-        Puppet::Application.available_application_names
       end
 
       # Run the puppet subcommand. If the subcommand is determined to be an
@@ -141,8 +121,6 @@ module Puppet
           end
 
           app = Puppet::Application.find(@subcommand_name).new(@command_line)
-          Puppet::Plugins.on_application_initialization(:application_object => @command_line)
-
           app.run
         end
       end

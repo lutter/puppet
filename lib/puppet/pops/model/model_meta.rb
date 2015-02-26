@@ -282,9 +282,7 @@ module Puppet::Pops::Model
     contains_one_uni 'body', Expression
   end
 
-  # A resource type definition (a 'define' in the DSL).
-  #
-  class ResourceTypeDefinition < NamedDefinition
+  class Application < NamedDefinition
   end
 
   # A node definition matches hosts using Strings, or Regular expressions. It may inherit from
@@ -483,7 +481,7 @@ module Puppet::Pops::Model
   class EppExpression < Expression
     # EPP can be specified without giving any parameter specification.
     # However, the parameters of the lambda in that case are the empty
-    # array, which is the same as when the parameters are explicity
+    # array, which is the same as when the parameters are explicitly
     # specified as empty. This attribute tracks that difference.
     has_attr 'parameters_specified', Boolean
     contains_one_uni 'body', Expression
@@ -527,6 +525,13 @@ module Puppet::Pops::Model
     contains_many_uni 'bodies', ResourceBody
   end
 
+  # A resource type definition (a 'define' in the DSL).
+  #
+  class ResourceTypeDefinition < NamedDefinition
+    contains_many_uni 'produces', ResourceExpression
+    contains_many_uni 'consumes', Parameter
+  end
+
   # A resource defaults sets defaults for a resource type. This class inherits from AbstractResource
   # but does only support the :regular form (this is intentional to be able to produce better error messages
   # when illegal forms are applied to a model.
@@ -563,14 +568,20 @@ module Puppet::Pops::Model
 
   # A Program is the top level construct returned by the parser
   # it contains the parsed result in the body, and has a reference to the full source text,
-  # and its origin. The line_offset's is an array with the start offset of each line.
+  # and its origin. The line_offset's is an array with the start offset of each line measured
+  # in bytes or characters (as given by the attribute char_offsets). The `char_offsets` setting
+  # applies to all offsets recorded in the mode (not just the line_offsets).
   #
+  # A model that will be shared across different platforms should use char_offsets true as the byte
+  # offsets are platform and encoding dependent.
+  # 
   class Program < PopsObject
     contains_one_uni 'body', Expression
     has_many 'definitions', Definition
     has_attr 'source_text', String
     has_attr 'source_ref', String
     has_many_attr 'line_offsets', Integer
+    has_attr 'char_offsets', Boolean, :defaultValueLiteral => 'false'
     has_attr 'locator', Object, :lowerBound => 1, :transient => true
   end
 end

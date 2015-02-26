@@ -159,7 +159,7 @@ Puppet::Type.type(:zone).provide(:solaris) do
     end
   end
 
-  def install(dummy_argument=:work_arround_for_ruby_GC_bug)
+  def install
     if @resource[:clone] # TODO: add support for "-s snapshot"
       zoneadm :clone, @resource[:clone]
     elsif @resource[:install_args]
@@ -234,10 +234,10 @@ Puppet::Type.type(:zone).provide(:solaris) do
           end
           current[$1.intern] = $2
         else
-          err "Ignoring '#{line}'"
+          Puppet.err "Ignoring '#{line}'"
         end
       else
-        debug "Ignoring zone output '#{line}'"
+        Puppet.debug "Ignoring zone output '#{line}'"
       end
     end
 

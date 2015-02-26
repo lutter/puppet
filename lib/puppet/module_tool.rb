@@ -136,7 +136,7 @@ module Puppet
     # Given a hash of options, we should discover or create a
     # {Puppet::Node::Environment} instance that reflects the provided options.
     #
-    # Generally speaking, the `:modulepath` parameter should supercede all
+    # Generally speaking, the `:modulepath` parameter should supersede all
     # others, the `:environment` parameter should follow after that, and we
     # should default to Puppet's current environment.
     #
@@ -151,7 +151,7 @@ module Puppet
       elsif options[:environment]
         # This use of looking up an environment is correct since it honours
         # a reguest to get a particular environment via environment name.
-        Puppet.lookup(:environments).get(options[:environment])
+        Puppet.lookup(:environments).get!(options[:environment])
       else
         Puppet.lookup(:current_environment)
       end
@@ -168,7 +168,7 @@ module Puppet
     #         unparsed range expression.
     def self.parse_module_dependency(where, dep)
       dep_name = dep['name'].tr('/', '-')
-      range = dep['version_requirement'] || dep['versionRequirement'] || '>= 0.0.0'
+      range = dep['version_requirement'] || '>= 0.0.0'
 
       begin
         parsed_range = Semantic::VersionRange.parse(range)

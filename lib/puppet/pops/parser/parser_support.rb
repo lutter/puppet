@@ -46,13 +46,25 @@ class Puppet::Pops::Parser::Parser
     [namespace, name].join('::').sub(/^::/, '')
   end
 
-  # Raises a Parse error.
-  def error(value, message, options = {})
+  # Raises a Parse error with location information. Information about file is always obtained from the
+  # lexer. Line and position is produced if the given semantic is a Positioned object and have been given an offset.
+  #
+  def error(semantic, message)
+    semantic = semantic.current() if semantic.is_a?(Puppet::Pops::Model::Factory)
+    # Adapt the model so it is possible to get location information.
+    # The model may not have been added to the source tree, so give it the lexer's locator
+    # directly instead of searching for the root Program where the locator is normally stored.
+    #
+    if semantic.is_a?(Puppet::Pops::Model::Positioned)
+      adapter = Puppet::Pops::Adapters::SourcePosAdapter.adapt(semantic)
+      adapter.locator = @lexer.locator
+    else
+      adapter = nil
+    end
     except = Puppet::ParseError.new(message)
-    except.line = options[:line] || value[:line]
-    except.file = options[:file] || value[:file]
-    except.pos = options[:pos]   || value[:pos]
-
+    except.file = @lexer.locator.file
+    except.line = adapter.line if adapter
+    except.pos = adapter.pos if adapter
     raise except
   end
 
@@ -114,10 +126,9 @@ class Puppet::Pops::Parser::Parser
   end
 
   # Parses a String of pp DSL code.
-  # @todo make it possible to pass a given origin
   #
-  def parse_string(code)
-    @lexer.string = code
+  def parse_string(code, path = '')
+    @lexer.lex_string(code, path)
     _parse()
   end
 
@@ -163,7 +174,25 @@ class Puppet::Pops::Parser::Parser
   # expression, or expression list
   #
   def transform_calls(expressions)
-    Factory.transform_calls(expressions)
+    # Factory transform raises an error if a non qualified name is followed by an argument list
+    # since there is no way that that can be transformed back to sanity. This occurs in situations like this:
+    #
+    #  $a = 10, notice hello
+    #
+    # where the "10, notice" forms an argument list. The parser builds an Array with the expressions and includes
+    # the comma tokens to enable the error to be reported against the first comma.
+    #
+    begin
+      Factory.transform_calls(expressions)
+    rescue Puppet::Pops::Model::Factory::ArgsToNonCallError => e
+      # e.args[1] is the first comma token in the list
+      # e.name_expr is the function name expression
+      if e.name_expr.is_a?(Puppet::Pops::Model::QualifiedName)
+        error(e.args[1], "attempt to pass argument list to the function '#{e.name_expr.value}' which cannot be called without parentheses")
+      else
+        error(e.args[1], "illegal comma separated argument list")
+      end
+    end
   end
 
   # Transforms a LEFT followed by the result of attribute_operations, this may be a call or an invalid sequence

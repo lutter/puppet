@@ -17,9 +17,9 @@ module Puppet::Pops::Evaluator::CallableMismatchDescriber
       result << "expected:\n  #{name}(#{signature_string(signature)}) - #{arg_count_string(signature.type)}"
     else
       result << "expected one of:\n"
-      result << supported_signatures.map do |signature|
-        params_type = signature.type.param_types
-        "  #{name}(#{signature_string(signature)}) - #{arg_count_string(signature.type)}"
+      result << supported_signatures.map do |sig|
+        params_type = sig.type.param_types
+        "  #{name}(#{signature_string(sig)}) - #{arg_count_string(sig.type)}"
       end.join("\n")
     end
 
@@ -157,14 +157,14 @@ module Puppet::Pops::Evaluator::CallableMismatchDescriber
   #   * from and to are equal => `{from}`
   #   * from and to are both and 1 and squelch_one == true => `''`
   #   * from is 0 and to is 1 => `'?'`
-  #   * to is INFINITY => `{from, }`
+  #   * to is Float::INFINITY => `{from, }`
   #
   # @api private
   def self.range_string(size_range, squelch_one = true)
     from, to = size_range
     if from == to
       (squelch_one && from == 1) ? '' : "{#{from}}"
-    elsif to == Puppet::Pops::Types::INFINITY
+    elsif to == Float::INFINITY
       "{#{from},}"
     elsif from == 0 && to == 1
       '?'

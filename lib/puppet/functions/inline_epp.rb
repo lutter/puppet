@@ -70,15 +70,14 @@
 #     Hello <%= $x %> <%= $y %>!
 #     END
 #
-# @since 3.5
-# @note Requires Future Parser
+# @since 4.0.0
 #
 Puppet::Functions.create_function(:inline_epp, Puppet::Functions::InternalFunction) do
 
   dispatch :inline_epp do
     scope_param()
-    param 'String', 'template'
-    param 'Hash[Pattern[/^\w+$/], Any]', 'parameters'
+    param 'String', :template
+    param 'Hash[Pattern[/^\w+$/], Any]', :parameters
     arg_count(1, 2)
   end
 

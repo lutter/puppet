@@ -16,8 +16,6 @@ class Puppet::Node
   attr_accessor :name, :classes, :source, :ipaddress, :parameters, :trusted_data, :environment_name
   attr_reader :time, :facts
 
-  ::PSON.register_document_type('Node',self)
-
   def self.from_data_hash(data)
     raise ArgumentError, "No name provided in serialized data" unless name = data['name']
 
@@ -28,11 +26,6 @@ class Puppet::Node
     node
   end
 
-  def self.from_pson(pson)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(pson)
-  end
-
   def to_data_hash
     result = {
       'name' => name,
@@ -41,17 +34,6 @@ class Puppet::Node
     result['classes'] = classes unless classes.empty?
     result['parameters'] = parameters unless parameters.empty?
     result
-  end
-
-  def to_pson_data_hash(*args)
-    {
-      'document_type' => "Node",
-      'data' =>  to_data_hash,
-    }
-  end
-
-  def to_pson(*args)
-    to_pson_data_hash.to_pson(*args)
   end
 
   def environment
@@ -67,7 +49,7 @@ class Puppet::Node
         # for a node when it has not specified its environment
         # Tt will be used to establish what the current environment is.
         #
-        self.environment = Puppet.lookup(:environments).get(Puppet[:environment])
+        self.environment = Puppet.lookup(:environments).get!(Puppet[:environment])
       end
 
       @environment
@@ -76,7 +58,7 @@ class Puppet::Node
 
   def environment=(env)
     if env.is_a?(String) or env.is_a?(Symbol)
-      @environment = Puppet.lookup(:environments).get(env)
+      @environment = Puppet.lookup(:environments).get!(env)
     else
       @environment = env
     end

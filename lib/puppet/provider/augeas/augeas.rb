@@ -39,6 +39,7 @@ Puppet::Type.type(:augeas).provide(:augeas) do
     "rm" => [ :path ],
     "clear" => [ :path ],
     "clearm" => [ :path, :string ],
+    "touch" => [ :path ],
     "mv" => [ :path, :path ],
     "insert" => [ :string, :string, :path ],
     "get" => [ :path, :comparator, :string ],
@@ -367,9 +368,7 @@ Puppet::Type.type(:augeas).provide(:augeas) do
           when "get"; return_value = process_get(cmd_array)
           when "match"; return_value = process_match(cmd_array)
           end
-        rescue SystemExit,NoMemoryError
-          raise
-        rescue Exception => e
+        rescue StandardError => e
           fail("Error sending command '#{command}' with params #{cmd_array[1..-1].inspect}/#{e.message}")
         end
       end
@@ -473,6 +472,12 @@ Puppet::Type.type(:augeas).provide(:augeas) do
             else
               fail("command '#{command}' not supported in installed version of ruby-augeas")
             end
+          when "touch"
+            debug("sending command '#{command}' (match, set) with params #{cmd_array.inspect}")
+            if aug.match(cmd_array[0]).empty?
+              rv = aug.clear(cmd_array[0])
+              fail("Error sending command '#{command}' with params #{cmd_array.inspect}") if (!rv)
+            end
           when "insert", "ins"
             label = cmd_array[0]
             where = cmd_array[1]
@@ -499,9 +504,7 @@ Puppet::Type.type(:augeas).provide(:augeas) do
             fail("Error sending command '#{command}' with params #{cmd_array.inspect}") if (rv == -1)
           else fail("Command '#{command}' is not supported")
         end
-      rescue SystemExit,NoMemoryError
-        raise
-      rescue Exception => e
+      rescue StandardError => e
         fail("Error sending command '#{command}' with params #{cmd_array.inspect}/#{e.message}")
       end
     end

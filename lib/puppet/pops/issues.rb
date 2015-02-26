@@ -174,17 +174,9 @@ module Puppet::Pops::Issues
     "Illegal attempt to assign to the numeric match result variable '$#{varname}'. Numeric variables are not assignable"
   end
 
-  APPEND_FAILED = issue :APPEND_FAILED, :message do
-    "Append assignment += failed with error: #{message}"
-  end
-
-  DELETE_FAILED = issue :DELETE_FAILED, :message do
-    "'Delete' assignment -= failed with error: #{message}"
-  end
-
   # parameters cannot have numeric names, clashes with match result variables
   ILLEGAL_NUMERIC_PARAMETER = issue :ILLEGAL_NUMERIC_PARAMETER, :name do
-    "The numeric parameter name '$#{varname}' cannot be used (clashes with numeric match result variables)"
+    "The numeric parameter name '$#{name}' cannot be used (clashes with numeric match result variables)"
   end
 
   # In certain versions of Puppet it may be allowed to assign to a not already assigned key
@@ -303,8 +295,7 @@ module Puppet::Pops::Issues
     "Illegal expression. #{label.a_an_uc(semantic)} is unacceptable as #{feature} in #{label.a_an(container)}"
   end
 
-  # Issues when an expression is used where it is not legal.
-  # E.g. an arithmetic expression where a hostname is expected.
+  # Issues when a variable is not a NAME
   #
   ILLEGAL_VARIABLE_EXPRESSION = hard_issue :ILLEGAL_VARIABLE_EXPRESSION do
     "Illegal variable expression. #{label.a_an_uc(semantic)} did not produce a variable name (String or Numeric)."
@@ -389,7 +380,7 @@ module Puppet::Pops::Issues
 
   BAD_TYPE_SLICE_ARITY = issue :BAD_TYPE_SLICE_ARITY, :base_type, :min, :max, :actual do
     base_type_label = base_type.is_a?(String) ? base_type : label.a_an_uc(base_type)
-    if max == -1 || max == 1.0 / 0.0 # Infinity
+    if max == -1 || max == Float::INFINITY
       "#{base_type_label}[] accepts #{min} or more arguments. Got #{actual}"
     elsif max && max != min
       "#{base_type_label}[] accepts #{min} to #{max} arguments. Got #{actual}"
@@ -418,7 +409,7 @@ module Puppet::Pops::Issues
     "Illegal Class name in class reference. #{label.a_an_uc(name)} cannot be used where a String is expected"
   end
 
-  ILLEGAL_DEFINITION_NAME = hard_issue :ILLEGAL_DEFINTION_NAME, :name do
+  ILLEGAL_DEFINITION_NAME = hard_issue :ILLEGAL_DEFINITION_NAME, :name do
     "Unacceptable name. The name '#{name}' is unacceptable as the name of #{label.a_an(semantic)}"
   end
 
@@ -464,6 +455,10 @@ module Puppet::Pops::Issues
 
   DUPLICATE_TITLE = issue :DUPLICATE_TITLE, :title  do
     "The title '#{title}' has already been used in this resource expression"
+  end
+
+  DUPLICATE_ATTRIBUTE = issue :DUPLICATE_ATTRIBUE, :attribute  do
+    "The attribute '#{attribute}' has already been set in this resource body"
   end
 
   MISSING_TITLE = hard_issue :MISSING_TITLE do
@@ -545,5 +540,13 @@ module Puppet::Pops::Issues
 
   TYPE_MISMATCH = hard_issue :TYPE_MISMATCH, :expected, :actual do
     "Expected value of type #{expected}, got #{actual}"
+  end
+
+  MULTIPLE_ATTRIBUTES_UNFOLD = hard_issue :MULTIPLE_ATTRIBUTES_UNFOLD do
+    "Unfolding of attributes from Hash can only be used once per resource body"
+  end
+
+  ILLEGAL_CATALOG_RELATED_EXPRESSION = hard_issue :ILLEGAL_CATALOG_RELATED_EXPRESSION do
+    "This #{label.label(semantic)} appears in a context where catalog related expressions are not allowed"
   end
 end

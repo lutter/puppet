@@ -7,29 +7,37 @@ test_name "ticket #16753 node data should be cached in yaml to allow it to be qu
 
 node_name = "woy_node_#{SecureRandom.hex}"
 auth_contents = <<AUTHCONF
-path /catalog/#{node_name}
+path /puppet/v3/catalog/#{node_name}
 auth yes
 allow *
 
-path /node/#{node_name}
+path /puppet/v3/node/#{node_name}
 auth yes
 allow *
 
-path /report/#{node_name}
+path /puppet/v3/report/#{node_name}
 auth yes
 allow *
 AUTHCONF
 
-initialize_temp_dirs
+temp_dirs = initialize_temp_dirs
 
 create_test_file master, "auth.conf", auth_contents, {}
 
 authfile = get_test_file_path master, "auth.conf"
 on master, "chmod 644 #{authfile}"
 
+temp_yamldir = File.join(temp_dirs[master.name], "yamldir")
+
+on master, "mkdir -p #{temp_yamldir}"
+user = puppet_user master
+group = puppet_group master
+on master, "chown #{user}:#{group} #{temp_yamldir}"
+
 master_opts = {
   'master' => {
-    'rest_authconfig' => authfile
+    'rest_authconfig' => authfile,
+    'yamldir' => temp_yamldir,
   }
 }
 

@@ -6,17 +6,7 @@ module Puppet; module Parser; end; end;
 #
 class Puppet::Parser::E4ParserAdapter
 
-  # Empty adapter fulfills watch_file contract without doing anything.
-  # @api private
-  class NullFileWatcher
-    def watch_file(file)
-      #nop
-    end
-  end
-
-  # @param file_watcher [#watch_file] something that can watch a file
-  def initialize(file_watcher = nil)
-    @file_watcher = file_watcher || NullFileWatcher.new
+  def initialize
     @file = ''
     @string = ''
     @use = :unspecified
@@ -26,17 +16,10 @@ class Puppet::Parser::E4ParserAdapter
   def file=(file)
     @file = file
     @use = :file
-    # watch if possible, but only if the file is something worth watching
-    @file_watcher.watch_file(file) if !file.nil? && file != ''
   end
 
   def parse(string = nil)
     self.string= string if string
-
-    if @file =~ /\.rb$/ && @use != :string
-      # Will throw an error
-      parse_ruby_file
-    end
 
     parse_result =
     if @use == :string
@@ -53,7 +36,7 @@ class Puppet::Parser::E4ParserAdapter
     # * a Model::Program
     # * a Model::Expression
     #
-    model = parse_result.nil? ? nil : parse_result.current 
+    model = parse_result.nil? ? nil : parse_result.current
     args = {}
     Puppet::Pops::Model::AstTransformer.new(@file).merge_location(args, model)
 
@@ -73,9 +56,5 @@ class Puppet::Parser::E4ParserAdapter
   def string=(string)
     @string = string
     @use = :string
-  end
-
-  def parse_ruby_file
-    raise Puppet::ParseError, "Ruby DSL is no longer supported. Attempt to parse #{@file}"
   end
 end

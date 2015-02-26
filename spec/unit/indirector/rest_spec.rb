@@ -3,30 +3,12 @@ require 'spec_helper'
 require 'puppet/indirector'
 require 'puppet/indirector/errors'
 require 'puppet/indirector/rest'
+require 'puppet/util/psych_support'
 
 HTTP_ERROR_CODES = [300, 400, 500]
 
 # Just one from each category since the code makes no real distinctions
 shared_examples_for "a REST terminus method" do |terminus_method|
-  describe "when talking to an older master" do
-    it "should set backward compatibility settings" do
-      response.stubs(:[]).with(Puppet::Network::HTTP::HEADER_PUPPET_VERSION).returns nil
-
-      terminus.send(terminus_method, request)
-      Puppet[:report_serialization_format].should == 'yaml'
-      Puppet[:legacy_query_parameter_serialization].should == true
-    end
-  end
-
-  describe "when talking to a 3.3.1 master" do
-    it "should not set backward compatibility settings" do
-      response.stubs(:[]).with(Puppet::Network::HTTP::HEADER_PUPPET_VERSION).returns "3.3.1"
-
-      terminus.send(terminus_method, request)
-      Puppet[:report_serialization_format].should == 'pson'
-      Puppet[:legacy_query_parameter_serialization].should == false
-    end
-  end
 
   HTTP_ERROR_CODES.each do |code|
     describe "when the response code is #{code}" do
@@ -93,6 +75,7 @@ end
 describe Puppet::Indirector::REST do
   before :all do
     class Puppet::TestModel
+      include Puppet::Util::PsychSupport
       extend Puppet::Indirector
       indirects :test_model
       attr_accessor :name, :data
@@ -135,6 +118,7 @@ describe Puppet::Indirector::REST do
   let(:terminus) { Puppet::TestModel.indirection.terminus(:rest) }
   let(:indirection) { Puppet::TestModel.indirection }
   let(:model) { Puppet::TestModel }
+  let(:url_prefix) { "#{Puppet::Network::HTTP::MASTER_URL_PREFIX}/v3"}
 
   around(:each) do |example|
     Puppet.override(:current_environment => Puppet::Node::Environment.create(:production, [])) do
@@ -171,39 +155,39 @@ describe Puppet::Indirector::REST do
   end
 
   it "should have a method for specifying what setting a subclass should use to retrieve its server" do
-    terminus_class.should respond_to(:use_server_setting)
+    expect(terminus_class).to respond_to(:use_server_setting)
   end
 
   it "should use any specified setting to pick the server" do
-    terminus_class.expects(:server_setting).returns :inventory_server
-    Puppet[:inventory_server] = "myserver"
-    terminus_class.server.should == "myserver"
+    terminus_class.expects(:server_setting).returns :ca_server
+    Puppet[:ca_server] = "myserver"
+    expect(terminus_class.server).to eq("myserver")
   end
 
   it "should default to :server for the server setting" do
     terminus_class.expects(:server_setting).returns nil
     Puppet[:server] = "myserver"
-    terminus_class.server.should == "myserver"
+    expect(terminus_class.server).to eq("myserver")
   end
 
   it "should have a method for specifying what setting a subclass should use to retrieve its port" do
-    terminus_class.should respond_to(:use_port_setting)
+    expect(terminus_class).to respond_to(:use_port_setting)
   end
 
   it "should use any specified setting to pick the port" do
     terminus_class.expects(:port_setting).returns :ca_port
     Puppet[:ca_port] = "321"
-    terminus_class.port.should == 321
+    expect(terminus_class.port).to eq(321)
   end
 
   it "should default to :port for the port setting" do
     terminus_class.expects(:port_setting).returns nil
     Puppet[:masterport] = "543"
-    terminus_class.port.should == 543
+    expect(terminus_class.port).to eq(543)
   end
 
   it 'should default to :puppet for the srv_service' do
-    Puppet::Indirector::REST.srv_service.should == :puppet
+    expect(Puppet::Indirector::REST.srv_service).to eq(:puppet)
   end
 
   describe "when creating an HTTP client" do
@@ -212,21 +196,21 @@ describe Puppet::Indirector::REST do
       terminus.class.expects(:port).returns 321
       terminus.class.expects(:server).returns "myserver"
       Puppet::Network::HttpPool.expects(:http_instance).with("myserver", 321).returns "myconn"
-      terminus.network(@request).should == "myconn"
+      expect(terminus.network(@request)).to eq("myconn")
     end
 
     it "should use the server from the indirection request if one is present" do
       @request = stub 'request', :key => "foo", :server => "myserver", :port => nil
       terminus.class.stubs(:port).returns 321
       Puppet::Network::HttpPool.expects(:http_instance).with("myserver", 321).returns "myconn"
-      terminus.network(@request).should == "myconn"
+      expect(terminus.network(@request)).to eq("myconn")
     end
 
     it "should use the port from the indirection request if one is present" do
       @request = stub 'request', :key => "foo", :server => nil, :port => 321
       terminus.class.stubs(:server).returns "myserver"
       Puppet::Network::HttpPool.expects(:http_instance).with("myserver", 321).returns "myconn"
-      terminus.network(@request).should == "myconn"
+      expect(terminus.network(@request)).to eq("myconn")
     end
   end
 
@@ -255,10 +239,12 @@ describe Puppet::Indirector::REST do
         # to avoid a failure.
         params.delete('ip')
 
+        params["environment"] = "production"
+
         request = find_request('whoa', params)
 
         connection.expects(:post).with do |uri, body|
-          body.split("&").sort == params.map {|key,value| "#{key}=#{value}"}.sort
+            body.split("&").sort == params.map {|key,value| "#{key}=#{value}"}.sort
         end.returns(mock_response(200, 'body'))
 
         terminus.find(request)
@@ -269,9 +255,9 @@ describe Puppet::Indirector::REST do
       it "calls get on the connection" do
         request = find_request('foo bar')
 
-        connection.expects(:get).with('/production/test_model/foo%20bar?', anything).returns(mock_response('200', 'response body'))
+        connection.expects(:get).with("#{url_prefix}/test_model/foo%20bar?environment=production&", anything).returns(mock_response('200', 'response body'))
 
-        terminus.find(request).should == model.new('foo bar', 'response body')
+        expect(terminus.find(request)).to eq(model.new('foo bar', 'response body'))
       end
     end
 
@@ -280,13 +266,12 @@ describe Puppet::Indirector::REST do
 
       connection.expects(:get).returns(response)
 
-      terminus.find(request).should == nil
+      expect(terminus.find(request)).to eq(nil)
     end
 
     it 'raises no warning for a 404 (when not asked to do so)' do
       response = mock_response('404', 'this is the notfound you are looking for')
       connection.expects(:get).returns(response)
-      expected_message = 'Find /production/test_model/foo? resulted in 404 with the message: this is the notfound you are looking for'
       expect{terminus.find(request)}.to_not raise_error()
     end
 
@@ -300,7 +285,7 @@ describe Puppet::Indirector::REST do
           terminus.find(request)
         end.to raise_error(
           Puppet::Error,
-          'Find /production/test_model/foo?fail_on_404=true resulted in 404 with the message: this is the notfound you are looking for')
+          "Find #{url_prefix}/test_model/foo?environment=production&fail_on_404=true resulted in 404 with the message: this is the notfound you are looking for")
       end
 
       it 'truncates the URI when it is very long' do
@@ -312,7 +297,7 @@ describe Puppet::Indirector::REST do
           terminus.find(request)
         end.to raise_error(
           Puppet::Error,
-          /\/production\/test_model\/foo.*long_param=A+\.\.\..*resulted in 404 with the message/)
+          /\/test_model\/foo.*\?environment=production&.*long_param=A+\.\.\..*resulted in 404 with the message/)
       end
 
       it 'does not truncate the URI when logging debug information' do
@@ -325,7 +310,7 @@ describe Puppet::Indirector::REST do
           terminus.find(request)
         end.to raise_error(
           Puppet::Error,
-          /\/production\/test_model\/foo.*long_param=A+B.*resulted in 404 with the message/)
+          /\/test_model\/foo.*\?environment=production&.*long_param=A+B.*resulted in 404 with the message/)
       end
     end
 
@@ -336,7 +321,7 @@ describe Puppet::Indirector::REST do
         model.new('overwritten', 'decoded body')
       )
 
-      terminus.find(request).should == model.new('foo', 'decoded body')
+      expect(terminus.find(request)).to eq(model.new('foo', 'decoded body'))
     end
 
     it "doesn't require the model to support name=" do
@@ -347,7 +332,7 @@ describe Puppet::Indirector::REST do
       instance.expects(:respond_to?).with(:name=).returns(false)
       instance.expects(:name=).never
 
-      terminus.find(request).should == model.new('name', 'decoded body')
+      expect(terminus.find(request)).to eq(model.new('name', 'decoded body'))
     end
 
     it "provides an Accept header containing the list of supported formats joined with commas" do
@@ -371,7 +356,7 @@ describe Puppet::Indirector::REST do
 
       model.expects(:convert_from).with("text/plain", "mydata").returns "myobject"
 
-      terminus.find(request).should == "myobject"
+      expect(terminus.find(request)).to eq("myobject")
     end
 
     it "decompresses the body before passing it to the model for deserialization" do
@@ -383,7 +368,7 @@ describe Puppet::Indirector::REST do
 
       model.expects(:convert_from).with("text/plain", uncompressed_body).returns "myobject"
 
-      terminus.find(request).should == "myobject"
+      expect(terminus.find(request)).to eq("myobject")
     end
   end
 
@@ -402,13 +387,13 @@ describe Puppet::Indirector::REST do
     it "returns true if there was a successful http response" do
       connection.expects(:head).returns mock_response('200', nil)
 
-      terminus.head(request).should == true
+      expect(terminus.head(request)).to eq(true)
     end
 
     it "returns false on a 404 response" do
       connection.expects(:head).returns mock_response('404', nil)
 
-      terminus.head(request).should == false
+      expect(terminus.head(request)).to eq(false)
     end
   end
 
@@ -426,7 +411,7 @@ describe Puppet::Indirector::REST do
     it_behaves_like 'a deserializing terminus method', :search
 
     it "should call the GET http method on a network connection" do
-      connection.expects(:get).with('/production/test_models/foo', has_key('Accept')).returns mock_response(200, 'data3, data4')
+      connection.expects(:get).with("#{url_prefix}/test_models/foo?environment=production&", has_key('Accept')).returns mock_response(200, 'data3, data4')
 
       terminus.search(request)
     end
@@ -436,11 +421,11 @@ describe Puppet::Indirector::REST do
 
       connection.expects(:get).returns(response)
 
-      terminus.search(request).should == []
+      expect(terminus.search(request)).to eq([])
     end
 
     it "asks the model to deserialize the response body into multiple instances" do
-      terminus.search(request).should == [model.new('', 'data1'), model.new('', 'data2'), model.new('', 'data3')]
+      expect(terminus.search(request)).to eq([model.new('', 'data1'), model.new('', 'data2'), model.new('', 'data3')])
     end
 
     it "should provide an Accept header containing the list of supported formats joined with commas" do
@@ -453,7 +438,7 @@ describe Puppet::Indirector::REST do
     it "should return an empty array if serialization returns nil" do
       model.stubs(:convert_from_multiple).returns nil
 
-      terminus.search(request).should == []
+      expect(terminus.search(request)).to eq([])
     end
   end
 
@@ -471,7 +456,7 @@ describe Puppet::Indirector::REST do
     it_behaves_like 'a deserializing terminus method', :destroy
 
     it "should call the DELETE http method on a network connection" do
-      connection.expects(:delete).with('/production/test_model/foo', has_key('Accept')).returns(response)
+      connection.expects(:delete).with("#{url_prefix}/test_model/foo?environment=production&", has_key('Accept')).returns(response)
 
       terminus.destroy(request)
     end
@@ -485,7 +470,7 @@ describe Puppet::Indirector::REST do
     it "should deserialize and return the http response" do
       connection.expects(:delete).returns response
 
-      terminus.destroy(request).should == model.new('', 'body')
+      expect(terminus.destroy(request)).to eq(model.new('', 'body'))
     end
 
     it "returns nil on 404" do
@@ -493,7 +478,7 @@ describe Puppet::Indirector::REST do
 
       connection.expects(:delete).returns(response)
 
-      terminus.destroy(request).should == nil
+      expect(terminus.destroy(request)).to eq(nil)
     end
 
     it "should provide an Accept header containing the list of supported formats joined with commas" do
@@ -518,7 +503,7 @@ describe Puppet::Indirector::REST do
     it_behaves_like 'a REST terminus method', :save
 
     it "should call the PUT http method on a network connection" do
-      connection.expects(:put).with('/production/test_model/the%20thing', anything, has_key("Content-Type")).returns response
+      connection.expects(:put).with("#{url_prefix}/test_model/the%20thing?environment=production&", anything, has_key("Content-Type")).returns response
 
       terminus.save(request)
     end
@@ -541,13 +526,13 @@ describe Puppet::Indirector::REST do
 
       connection.expects(:put).returns(response)
 
-      terminus.save(request).should == nil
+      expect(terminus.save(request)).to eq(nil)
     end
 
     it "returns nil" do
       connection.expects(:put).returns response
 
-      terminus.save(request).should be_nil
+      expect(terminus.save(request)).to be_nil
     end
 
     it "should provide an Accept header containing the list of supported formats joined with commas" do

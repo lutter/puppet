@@ -9,24 +9,13 @@ describe "Package provider" do
 
     describe name, :if => provider.suitable? do
       it "should fail when asked to install an invalid package" do
-        pending("This test hangs forever with recent versions of RubyGems") if provider.name == :gem
-
         options = {:name => "nosuch#{provider.name}", :provider => provider.name}
-        # The MSI provider requires that source be specified as it is
-        # what actually determines if the package exists.
-        if provider.name == :msi
-          options[:source] = tmpfile("msi_package")
-        end
 
         pkg = Puppet::Type.newpackage(options)
-        lambda { pkg.provider.install }.should raise_error
+        expect { pkg.provider.install }.to raise_error
       end
 
       it "should be able to get a list of existing packages" do
-        if provider.name == :msi
-          Puppet[:vardir] = tmpdir('msi_package_var_dir')
-        end
-
         # the instances method requires root priviledges on gentoo
         # if the eix cache is outdated (to run eix-update) so make
         # sure we dont actually run eix-update
@@ -35,8 +24,8 @@ describe "Package provider" do
         end
 
         provider.instances.each do |package|
-          package.should be_instance_of(provider)
-          package.properties[:provider].should == provider.name
+          expect(package).to be_instance_of(provider)
+          expect(package.properties[:provider]).to eq(provider.name)
         end
       end
     end

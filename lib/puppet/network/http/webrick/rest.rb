@@ -1,6 +1,7 @@
 require 'puppet/network/http/handler'
 require 'resolv'
 require 'webrick'
+require 'webrick/httputils'
 require 'puppet/util/ssl'
 
 class Puppet::Network::HTTP::WEBrickREST < WEBrick::HTTPServlet::AbstractServlet
@@ -13,13 +14,23 @@ class Puppet::Network::HTTP::WEBrickREST < WEBrick::HTTPServlet::AbstractServlet
 
   def initialize(server)
     raise ArgumentError, "server is required" unless server
-    register([Puppet::Network::HTTP::API::V2.routes, Puppet::Network::HTTP::API::V1.routes])
+    register([Puppet::Network::HTTP::API.master_routes,
+              Puppet::Network::HTTP::API.ca_routes])
     super(server)
   end
 
   # Retrieve the request parameters, including authentication information.
   def params(request)
-    params = request.query || {}
+    query = request.query || {}
+    params =
+        if request.request_method == "PUT"
+          # webrick doesn't look at the query string for PUT requests, it only
+          # looks at the body, and then only if the body has a content type that
+          # looks like url-encoded form data.  We need the query string data as well.
+          WEBrick::HTTPUtils.parse_query(request.query_string).merge(query)
+        else
+          query
+        end
 
     params = Hash[params.collect do |key, value|
       all_values = value.list
@@ -60,9 +71,7 @@ class Puppet::Network::HTTP::WEBrickREST < WEBrick::HTTPServlet::AbstractServlet
 
   def client_cert(request)
     if cert = request.client_cert
-      cert = Puppet::SSL::Certificate.from_instance(cert)
-      warn_if_near_expiration(cert)
-      cert
+      Puppet::SSL::Certificate.from_instance(cert)
     else
       nil
     end

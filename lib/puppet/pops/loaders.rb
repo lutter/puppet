@@ -64,16 +64,7 @@ class Puppet::Pops::Loaders
   private
 
   def create_puppet_system_loader()
-    module_name = nil
-    loader_name = 'puppet_system'
-
-    # Puppet system may be installed in a fixed location via RPM, installed as a Gem, via source etc.
-    # The only way to find this across the different ways puppet can be installed is
-    # to search up the path from this source file's __FILE__ location until it finds the parent of
-    # lib/puppet... e.g.. dirname(__FILE__)/../../..  (i.e. <somewhere>/lib/puppet/pops/loaders.rb).
-    #
-    puppet_lib = File.join(File.dirname(__FILE__), '../../..')
-    Puppet::Pops::Loader::ModuleLoaders::FileBased.new(static_loader, self, module_name, puppet_lib, loader_name)
+    Puppet::Pops::Loader::ModuleLoaders.system_loader_from(static_loader, self)
   end
 
   def create_environment_loader(environment)
@@ -95,7 +86,14 @@ class Puppet::Pops::Loaders
     # The environment is not a namespace, so give it a nil "module_name"
     module_name = nil
     loader_name = "environment:#{environment.name}"
-    loader = Puppet::Pops::Loader::SimpleEnvironmentLoader.new(puppet_system_loader, loader_name)
+    env_conf = Puppet.lookup(:environments).get_conf(environment.name)
+    if env_conf.nil? || !env_conf.is_a?(Puppet::Settings::EnvironmentConf)
+      # Not a real directory environment, cannot work as a module TODO: Drop when legacy env are dropped?
+      loader = Puppet::Pops::Loader::SimpleEnvironmentLoader.new(puppet_system_loader, loader_name)
+    else
+      # View the environment as a module to allow loading from it - this module is always called 'environment'
+      loader = Puppet::Pops::Loader::ModuleLoaders.module_loader_from(puppet_system_loader, self, 'environment', env_conf.path_to_env)
+    end
 
     # An environment has a module path even if it has a null loader
     configure_loaders_for_modules(loader, environment)
@@ -121,7 +119,7 @@ class Puppet::Pops::Loaders
       # Create data about this module
       md = LoaderModuleData.new(puppet_module)
       mr[puppet_module.name] = md
-      md.public_loader = Puppet::Pops::Loader::ModuleLoaders::FileBased.new(parent_loader, self, md.name, md.path, md.name)
+      md.public_loader = Puppet::Pops::Loader::ModuleLoaders.module_loader_from(parent_loader, self, md.name, md.path)
     end
     # NOTE: Do not resolve all modules here - this is wasteful if only a subset of modules / functions are used
     #       The resolution is triggered by asking for a module's private loader, since this means there is interest
@@ -222,7 +220,7 @@ class Puppet::Pops::Loaders
     private
 
     def create_loader_with_all_modules_visible(from_module_data)
-      Puppet.debug("ModuleLoader: module '#{from_module_data.name}' has unknown dependencies - it will have all other modules visible")
+      Puppet.debug{"ModuleLoader: module '#{from_module_data.name}' has unknown dependencies - it will have all other modules visible"}
 
       Puppet::Pops::Loader::DependencyLoader.new(from_module_data.public_loader, from_module_data.name, all_module_loaders())
     end

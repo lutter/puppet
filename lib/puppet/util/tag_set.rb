@@ -16,23 +16,12 @@ class Puppet::Util::TagSet < Set
     self.new(data)
   end
 
-  def self.from_pson(data)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(data)
-  end
-
   def to_data_hash
     to_a
   end
 
   def to_pson(*args)
     to_data_hash.to_pson
-  end
-
-  # this makes puppet serialize it as an array for backwards
-  # compatibility
-  def to_zaml(z)
-    to_data_hash.to_zaml(z)
   end
 
   def join(*args)

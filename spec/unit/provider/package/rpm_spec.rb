@@ -45,10 +45,10 @@ describe provider_class do
   end
 
   describe 'provider features' do
-    it { should be_versionable }
-    it { should be_install_options }
-    it { should be_uninstall_options }
-    it { should be_virtual_packages }
+    it { is_expected.to be_versionable }
+    it { is_expected.to be_install_options }
+    it { is_expected.to be_uninstall_options }
+    it { is_expected.to be_virtual_packages }
   end
 
   describe "self.instances" do
@@ -280,11 +280,24 @@ describe provider_class do
       parser_test('bad data', {}, 1)
     end
 
-    it "does not log or fail if rpm returns package not found" do
-      Puppet.expects(:debug).never
-      expected_args = ["/bin/rpm", "-q", resource_name, "--nosignature", "--nodigest", "--qf", nevra_format]
-      Puppet::Util::Execution.expects(:execute).with(expected_args, execute_options).raises Puppet::ExecutionFailure.new("package #{resource_name} is not installed")
-      expect(provider.query).to be_nil
+    describe "when the package is not found" do
+      before do
+        Puppet.expects(:debug).never
+        expected_args = ["/bin/rpm", "-q", resource_name, "--nosignature", "--nodigest", "--qf", nevra_format]
+        Puppet::Util::Execution.expects(:execute).with(expected_args, execute_options).raises Puppet::ExecutionFailure.new("package #{resource_name} is not installed")
+      end
+
+      it "does not log or fail if allow_virtual is false" do
+        resource[:allow_virtual] = false
+        expect(provider.query).to be_nil
+      end
+
+      it "does not log or fail if allow_virtual is true" do
+        resource[:allow_virtual] = true
+        expected_args = ['/bin/rpm', '-q', resource_name, '--nosignature', '--nodigest', '--qf', nevra_format, '--whatprovides']
+        Puppet::Util::Execution.expects(:execute).with(expected_args, execute_options).raises Puppet::ExecutionFailure.new("package #{resource_name} is not provided")
+        expect(provider.query).to be_nil
+      end
     end
 
     it "parses virtual package" do
@@ -387,4 +400,85 @@ describe provider_class do
       end
     end
   end
+
+  describe 'version comparison' do
+
+    # test cases munged directly from rpm's own
+    # tests/rpmvercmp.at
+    it { expect(provider.rpmvercmp("1.0", "1.0")).to eq(0) }
+    it { expect(provider.rpmvercmp("1.0", "2.0")).to eq(-1) }
+    it { expect(provider.rpmvercmp("2.0", "1.0")).to eq(1) }
+    it { expect(provider.rpmvercmp("2.0.1", "2.0.1")).to eq(0) }
+    it { expect(provider.rpmvercmp("2.0", "2.0.1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("2.0.1", "2.0")).to eq(1) }
+    it { expect(provider.rpmvercmp("2.0.1a", "2.0.1a")).to eq(0) }
+    it { expect(provider.rpmvercmp("2.0.1a", "2.0.1")).to eq(1) }
+    it { expect(provider.rpmvercmp("2.0.1", "2.0.1a")).to eq(-1) }
+    it { expect(provider.rpmvercmp("5.5p1", "5.5p1")).to eq(0) }
+    it { expect(provider.rpmvercmp("5.5p1", "5.5p2")).to eq(-1) }
+    it { expect(provider.rpmvercmp("5.5p2", "5.5p1")).to eq(1) }
+    it { expect(provider.rpmvercmp("5.5p10", "5.5p10")).to eq(0) }
+    it { expect(provider.rpmvercmp("5.5p1", "5.5p10")).to eq(-1) }
+    it { expect(provider.rpmvercmp("5.5p10", "5.5p1")).to eq(1) }
+    it { expect(provider.rpmvercmp("10xyz", "10.1xyz")).to eq(-1) }
+    it { expect(provider.rpmvercmp("10.1xyz", "10xyz")).to eq(1) }
+    it { expect(provider.rpmvercmp("xyz10", "xyz10")).to eq(0) }
+    it { expect(provider.rpmvercmp("xyz10", "xyz10.1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("xyz10.1", "xyz10")).to eq(1) }
+    it { expect(provider.rpmvercmp("xyz.4", "xyz.4")).to eq(0) }
+    it { expect(provider.rpmvercmp("xyz.4", "8")).to eq(-1) }
+    it { expect(provider.rpmvercmp("8", "xyz.4")).to eq(1) }
+    it { expect(provider.rpmvercmp("xyz.4", "2")).to eq(-1) }
+    it { expect(provider.rpmvercmp("2", "xyz.4")).to eq(1) }
+    it { expect(provider.rpmvercmp("5.5p2", "5.6p1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("5.6p1", "5.5p2")).to eq(1) }
+    it { expect(provider.rpmvercmp("5.6p1", "6.5p1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("6.5p1", "5.6p1")).to eq(1) }
+    it { expect(provider.rpmvercmp("6.0.rc1", "6.0")).to eq(1) }
+    it { expect(provider.rpmvercmp("6.0", "6.0.rc1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("10b2", "10a1")).to eq(1) }
+    it { expect(provider.rpmvercmp("10a2", "10b2")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1.0aa", "1.0aa")).to eq(0) }
+    it { expect(provider.rpmvercmp("1.0a", "1.0aa")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1.0aa", "1.0a")).to eq(1) }
+    it { expect(provider.rpmvercmp("10.0001", "10.0001")).to eq(0) }
+    it { expect(provider.rpmvercmp("10.0001", "10.1")).to eq(0) }
+    it { expect(provider.rpmvercmp("10.1", "10.0001")).to eq(0) }
+    it { expect(provider.rpmvercmp("10.0001", "10.0039")).to eq(-1) }
+    it { expect(provider.rpmvercmp("10.0039", "10.0001")).to eq(1) }
+    it { expect(provider.rpmvercmp("4.999.9", "5.0")).to eq(-1) }
+    it { expect(provider.rpmvercmp("5.0", "4.999.9")).to eq(1) }
+    it { expect(provider.rpmvercmp("20101121", "20101121")).to eq(0) }
+    it { expect(provider.rpmvercmp("20101121", "20101122")).to eq(-1) }
+    it { expect(provider.rpmvercmp("20101122", "20101121")).to eq(1) }
+    it { expect(provider.rpmvercmp("2_0", "2_0")).to eq(0) }
+    it { expect(provider.rpmvercmp("2.0", "2_0")).to eq(0) }
+    it { expect(provider.rpmvercmp("2_0", "2.0")).to eq(0) }
+    it { expect(provider.rpmvercmp("a", "a")).to eq(0) }
+    it { expect(provider.rpmvercmp("a+", "a+")).to eq(0) }
+    it { expect(provider.rpmvercmp("a+", "a_")).to eq(0) }
+    it { expect(provider.rpmvercmp("a_", "a+")).to eq(0) }
+    it { expect(provider.rpmvercmp("+a", "+a")).to eq(0) }
+    it { expect(provider.rpmvercmp("+a", "_a")).to eq(0) }
+    it { expect(provider.rpmvercmp("_a", "+a")).to eq(0) }
+    it { expect(provider.rpmvercmp("+_", "+_")).to eq(0) }
+    it { expect(provider.rpmvercmp("_+", "+_")).to eq(0) }
+    it { expect(provider.rpmvercmp("_+", "_+")).to eq(0) }
+    it { expect(provider.rpmvercmp("+", "_")).to eq(0) }
+    it { expect(provider.rpmvercmp("_", "+")).to eq(0) }
+    it { expect(provider.rpmvercmp("1.0~rc1", "1.0~rc1")).to eq(0) }
+    it { expect(provider.rpmvercmp("1.0~rc1", "1.0")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1.0", "1.0~rc1")).to eq(1) }
+    it { expect(provider.rpmvercmp("1.0~rc1", "1.0~rc2")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1.0~rc2", "1.0~rc1")).to eq(1) }
+    it { expect(provider.rpmvercmp("1.0~rc1~git123", "1.0~rc1~git123")).to eq(0) }
+    it { expect(provider.rpmvercmp("1.0~rc1~git123", "1.0~rc1")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1.0~rc1", "1.0~rc1~git123")).to eq(1) }
+    it { expect(provider.rpmvercmp("1.0~rc1", "1.0arc1")).to eq(-1) }
+
+    # non-upstream test cases
+    it { expect(provider.rpmvercmp("405", "406")).to eq(-1) }
+    it { expect(provider.rpmvercmp("1", "0")).to eq(1) }
+  end
+
 end

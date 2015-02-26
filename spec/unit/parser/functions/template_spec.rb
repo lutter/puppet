@@ -19,7 +19,7 @@ describe "the template function" do
     tw1.stubs(:result).returns("result1")
     tw2.stubs(:result).returns("result2")
 
-    scope.function_template(["1","2"]).should == "result1result2"
+    expect(scope.function_template(["1","2"])).to eq("result1result2")
   end
 
   it "raises an error if the template raises an error" do
@@ -36,12 +36,12 @@ describe "the template function" do
     it "raises an error when accessing an undefined variable" do
       expect {
         eval_template("template <%= deprecated %>")
-      }.to raise_error(Puppet::ParseError, /Could not find value for 'deprecated'/)
+      }.to raise_error(Puppet::ParseError, /undefined local variable or method `deprecated'/)
     end
 
     it "looks up the value from the scope" do
       scope["deprecated"] = "deprecated value"
-      eval_template("template <%= deprecated %>").should == "template deprecated value"
+      expect { eval_template("template <%= deprecated %>")}.to raise_error(/undefined local variable or method `deprecated'/)
     end
 
     it "still has access to Kernel methods" do
@@ -52,33 +52,33 @@ describe "the template function" do
   context "when accessing scope variables as instance variables" do
     it "has access to values" do
       scope['scope_var'] = "value"
-      eval_template("<%= @scope_var %>").should == "value"
+      expect(eval_template("<%= @scope_var %>")).to eq("value")
     end
 
     it "get nil accessing a variable that does not exist" do
-      eval_template("<%= @not_defined.nil? %>").should == "true"
+      expect(eval_template("<%= @not_defined.nil? %>")).to eq("true")
     end
 
     it "get nil accessing a variable that is undef" do
       scope['undef_var'] = :undef
-      eval_template("<%= @undef_var.nil? %>").should == "true"
+      expect(eval_template("<%= @undef_var.nil? %>")).to eq("true")
     end
   end
 
   it "is not interfered with by having a variable named 'string' (#14093)" do
     scope['string'] = "this output should not be seen"
-    eval_template("some text that is static").should == "some text that is static"
+    expect(eval_template("some text that is static")).to eq("some text that is static")
   end
 
   it "has access to a variable named 'string' (#14093)" do
     scope['string'] = "the string value"
-    eval_template("string was: <%= @string %>").should == "string was: the string value"
+    expect(eval_template("string was: <%= @string %>")).to eq("string was: the string value")
   end
 
   it "does not have direct access to Scope#lookupvar" do
     expect {
       eval_template("<%= lookupvar('myvar') %>")
-    }.to raise_error(Puppet::ParseError, /Could not find value for 'lookupvar'/)
+    }.to raise_error(Puppet::ParseError, /undefined method `lookupvar'/)
   end
 
   def eval_template(content)

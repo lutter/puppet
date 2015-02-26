@@ -48,21 +48,16 @@ describe Puppet::Util::Autoload do
     AutoloadIntegrator.clear
   end
 
-  it "should make instances available by the loading class" do
-    loader = Puppet::Util::Autoload.new("foo", "bar")
-    Puppet::Util::Autoload["foo"].should == loader
-  end
-
   it "should not fail when asked to load a missing file" do
-    Puppet::Util::Autoload.new("foo", "bar").load(:eh).should be_false
+    expect(Puppet::Util::Autoload.new("foo", "bar").load(:eh)).to be_falsey
   end
 
   it "should load and return true when it successfully loads a file" do
     with_loader("foo", "bar") { |dir,loader|
       with_file(:mything, dir, "mything.rb") {
-        loader.load(:mything).should be_true
-        loader.class.should be_loaded("bar/mything")
-        AutoloadIntegrator.should be_thing(:mything)
+        expect(loader.load(:mything)).to be_truthy
+        expect(loader.class).to be_loaded("bar/mything")
+        expect(AutoloadIntegrator).to be_thing(:mything)
       }
     }
   end
@@ -71,7 +66,7 @@ describe Puppet::Util::Autoload do
     with_loader("foo", "bar") { |dir,loader|
       with_file(:noext, dir, "noext.rb") {
         loader.load(:noext)
-        loader.class.should be_loaded("bar/noext")
+        expect(loader.class).to be_loaded("bar/noext")
       }
     }
   end
@@ -80,7 +75,7 @@ describe Puppet::Util::Autoload do
     with_loader("foo", "bar") { |dir,loader|
       with_file(:noext, dir, "withext.rb") {
         loader.load(:withext)
-        loader.class.should be_loaded("bar/withext.rb")
+        expect(loader.class).to be_loaded("bar/withext.rb")
       }
     }
   end
@@ -99,7 +94,7 @@ describe Puppet::Util::Autoload do
       with_loader("foo", "foo") do |dir, loader|
         with_file(:plugin, file.split("/")) do
           loader.load(:plugin)
-          loader.class.should be_loaded("foo/plugin.rb")
+          expect(loader.class).to be_loaded("foo/plugin.rb")
         end
       end
     end

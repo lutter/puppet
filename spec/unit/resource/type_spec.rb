@@ -1,36 +1,36 @@
 #! /usr/bin/env ruby
 require 'spec_helper'
 require 'puppet/resource/type'
-
+require 'puppet/pops'
 require 'matchers/json'
 
 describe Puppet::Resource::Type do
   include JSONMatchers
 
   it "should have a 'name' attribute" do
-    Puppet::Resource::Type.new(:hostclass, "foo").name.should == "foo"
+    expect(Puppet::Resource::Type.new(:hostclass, "foo").name).to eq("foo")
   end
 
-  [:code, :doc, :line, :file, :resource_type_collection, :ruby_code].each do |attr|
+  [:code, :doc, :line, :file, :resource_type_collection].each do |attr|
     it "should have a '#{attr}' attribute" do
       type = Puppet::Resource::Type.new(:hostclass, "foo")
       type.send(attr.to_s + "=", "yay")
-      type.send(attr).should == "yay"
+      expect(type.send(attr)).to eq("yay")
     end
   end
 
   [:hostclass, :node, :definition].each do |type|
     it "should know when it is a #{type}" do
-      Puppet::Resource::Type.new(type, "foo").send("#{type}?").should be_true
+      expect(Puppet::Resource::Type.new(type, "foo").send("#{type}?")).to be_truthy
     end
   end
 
   it "should indirect 'resource_type'" do
-    Puppet::Resource::Type.indirection.name.should == :resource_type
+    expect(Puppet::Resource::Type.indirection.name).to eq(:resource_type)
   end
 
   it "should default to 'parser' for its terminus class" do
-    Puppet::Resource::Type.indirection.terminus_class.should == :parser
+    expect(Puppet::Resource::Type.indirection.terminus_class).to eq(:parser)
   end
 
   describe "when converting to json" do
@@ -47,8 +47,8 @@ describe Puppet::Resource::Type do
     end
 
     it "should include the name and type" do
-      double_convert.name.should == @type.name
-      double_convert.type.should == @type.type
+      expect(double_convert.name).to eq(@type.name)
+      expect(double_convert.type).to eq(@type.type)
     end
 
     it "should validate with only name and kind" do
@@ -68,39 +68,39 @@ describe Puppet::Resource::Type do
     it "should include any arguments" do
       @type.set_arguments("one" => nil, "two" => "foo")
 
-      double_convert.arguments.should == {"one" => nil, "two" => "foo"}
+      expect(double_convert.arguments).to eq({"one" => nil, "two" => "foo"})
     end
 
     it "should not include arguments if none are present" do
-      @type.to_pson["arguments"].should be_nil
+      expect(@type.to_pson["arguments"]).to be_nil
     end
 
     [:line, :doc, :file, :parent].each do |attr|
       it "should include #{attr} when set" do
         @type.send(attr.to_s + "=", "value")
-        double_convert.send(attr).should == "value"
+        expect(double_convert.send(attr)).to eq("value")
       end
 
       it "should not include #{attr} when not set" do
-        @type.to_pson[attr.to_s].should be_nil
+        expect(@type.to_pson[attr.to_s]).to be_nil
       end
     end
 
     it "should not include docs if they are empty" do
       @type.doc = ""
-      @type.to_pson["doc"].should be_nil
+      expect(@type.to_pson["doc"]).to be_nil
     end
   end
 
   describe "when a node"  do
     it "should allow a regex as its name" do
-      lambda { Puppet::Resource::Type.new(:node, /foo/) }.should_not raise_error
+      expect { Puppet::Resource::Type.new(:node, /foo/) }.not_to raise_error
     end
 
     it "should allow an AST::HostName instance as its name" do
       regex = Puppet::Parser::AST::Regex.new(:value => /foo/)
       name = Puppet::Parser::AST::HostName.new(:value => regex)
-      lambda { Puppet::Resource::Type.new(:node, name) }.should_not raise_error
+      expect { Puppet::Resource::Type.new(:node, name) }.not_to raise_error
     end
 
     it "should match against the regexp in the AST::HostName when a HostName instance is provided" do
@@ -108,138 +108,143 @@ describe Puppet::Resource::Type do
       name = Puppet::Parser::AST::HostName.new(:value => regex)
       node = Puppet::Resource::Type.new(:node, name)
 
-      node.match("foo").should be_true
+      expect(node.match("foo")).to be_truthy
     end
 
     it "should return the value of the hostname if provided a string-form AST::HostName instance as the name" do
       name = Puppet::Parser::AST::HostName.new(:value => "foo")
       node = Puppet::Resource::Type.new(:node, name)
 
-      node.name.should == "foo"
+      expect(node.name).to eq("foo")
     end
 
     describe "and the name is a regex" do
       it "should have a method that indicates that this is the case" do
-        Puppet::Resource::Type.new(:node, /w/).should be_name_is_regex
+        expect(Puppet::Resource::Type.new(:node, /w/)).to be_name_is_regex
       end
 
       it "should set its namespace to ''" do
-        Puppet::Resource::Type.new(:node, /w/).namespace.should == ""
+        expect(Puppet::Resource::Type.new(:node, /w/).namespace).to eq("")
       end
 
       it "should return the regex converted to a string when asked for its name" do
-        Puppet::Resource::Type.new(:node, /ww/).name.should == "ww"
+        expect(Puppet::Resource::Type.new(:node, /ww/).name).to eq("ww")
       end
 
       it "should downcase the regex when returning the name as a string" do
-        Puppet::Resource::Type.new(:node, /W/).name.should == "w"
+        expect(Puppet::Resource::Type.new(:node, /W/).name).to eq("w")
       end
 
       it "should remove non-alpha characters when returning the name as a string" do
-        Puppet::Resource::Type.new(:node, /w*w/).name.should_not include("*")
+        expect(Puppet::Resource::Type.new(:node, /w*w/).name).not_to include("*")
       end
 
       it "should remove leading dots when returning the name as a string" do
-        Puppet::Resource::Type.new(:node, /.ww/).name.should_not =~ /^\./
+        expect(Puppet::Resource::Type.new(:node, /.ww/).name).not_to match(/^\./)
       end
 
       it "should have a method for matching its regex name against a provided name" do
-        Puppet::Resource::Type.new(:node, /.ww/).should respond_to(:match)
+        expect(Puppet::Resource::Type.new(:node, /.ww/)).to respond_to(:match)
       end
 
       it "should return true when its regex matches the provided name" do
-        Puppet::Resource::Type.new(:node, /\w/).match("foo").should be_true
+        expect(Puppet::Resource::Type.new(:node, /\w/).match("foo")).to be_truthy
       end
 
       it "should return true when its regex matches the provided name" do
-        Puppet::Resource::Type.new(:node, /\w/).match("foo").should be_true
+        expect(Puppet::Resource::Type.new(:node, /\w/).match("foo")).to be_truthy
       end
 
       it "should return false when its regex does not match the provided name" do
-        (!!Puppet::Resource::Type.new(:node, /\d/).match("foo")).should be_false
+        expect(!!Puppet::Resource::Type.new(:node, /\d/).match("foo")).to be_falsey
       end
 
       it "should return true when its name, as a string, is matched against an equal string" do
-        Puppet::Resource::Type.new(:node, "foo").match("foo").should be_true
+        expect(Puppet::Resource::Type.new(:node, "foo").match("foo")).to be_truthy
       end
 
       it "should return false when its name is matched against an unequal string" do
-        Puppet::Resource::Type.new(:node, "foo").match("bar").should be_false
+        expect(Puppet::Resource::Type.new(:node, "foo").match("bar")).to be_falsey
       end
 
       it "should match names insensitive to case" do
-        Puppet::Resource::Type.new(:node, "fOo").match("foO").should be_true
+        expect(Puppet::Resource::Type.new(:node, "fOo").match("foO")).to be_truthy
       end
     end
   end
 
   describe "when initializing" do
     it "should require a resource super type" do
-      Puppet::Resource::Type.new(:hostclass, "foo").type.should == :hostclass
+      expect(Puppet::Resource::Type.new(:hostclass, "foo").type).to eq(:hostclass)
     end
 
     it "should fail if provided an invalid resource super type" do
-      lambda { Puppet::Resource::Type.new(:nope, "foo") }.should raise_error(ArgumentError)
+      expect { Puppet::Resource::Type.new(:nope, "foo") }.to raise_error(ArgumentError)
     end
 
     it "should set its name to the downcased, stringified provided name" do
-      Puppet::Resource::Type.new(:hostclass, "Foo::Bar".intern).name.should == "foo::bar"
+      expect(Puppet::Resource::Type.new(:hostclass, "Foo::Bar".intern).name).to eq("foo::bar")
     end
 
     it "should set its namespace to the downcased, stringified qualified name for classes" do
-      Puppet::Resource::Type.new(:hostclass, "Foo::Bar::Baz".intern).namespace.should == "foo::bar::baz"
+      expect(Puppet::Resource::Type.new(:hostclass, "Foo::Bar::Baz".intern).namespace).to eq("foo::bar::baz")
     end
 
     [:definition, :node].each do |type|
       it "should set its namespace to the downcased, stringified qualified portion of the name for #{type}s" do
-        Puppet::Resource::Type.new(type, "Foo::Bar::Baz".intern).namespace.should == "foo::bar"
+        expect(Puppet::Resource::Type.new(type, "Foo::Bar::Baz".intern).namespace).to eq("foo::bar")
       end
     end
 
     %w{code line file doc}.each do |arg|
       it "should set #{arg} if provided" do
         type = Puppet::Resource::Type.new(:hostclass, "foo", arg.to_sym => "something")
-        type.send(arg).should == "something"
+        expect(type.send(arg)).to eq("something")
       end
     end
 
     it "should set any provided arguments with the keys as symbols" do
       type = Puppet::Resource::Type.new(:hostclass, "foo", :arguments => {:foo => "bar", :baz => "biz"})
-      type.should be_valid_parameter("foo")
-      type.should be_valid_parameter("baz")
+      expect(type).to be_valid_parameter("foo")
+      expect(type).to be_valid_parameter("baz")
     end
 
     it "should set any provided arguments with they keys as strings" do
       type = Puppet::Resource::Type.new(:hostclass, "foo", :arguments => {"foo" => "bar", "baz" => "biz"})
-      type.should be_valid_parameter(:foo)
-      type.should be_valid_parameter(:baz)
+      expect(type).to be_valid_parameter(:foo)
+      expect(type).to be_valid_parameter(:baz)
     end
 
     it "should function if provided no arguments" do
       type = Puppet::Resource::Type.new(:hostclass, "foo")
-      type.should_not be_valid_parameter(:foo)
+      expect(type).not_to be_valid_parameter(:foo)
     end
   end
 
   describe "when testing the validity of an attribute" do
     it "should return true if the parameter was typed at initialization" do
-      Puppet::Resource::Type.new(:hostclass, "foo", :arguments => {"foo" => "bar"}).should be_valid_parameter("foo")
+      expect(Puppet::Resource::Type.new(:hostclass, "foo", :arguments => {"foo" => "bar"})).to be_valid_parameter("foo")
     end
 
     it "should return true if it is a metaparam" do
-      Puppet::Resource::Type.new(:hostclass, "foo").should be_valid_parameter("require")
+      expect(Puppet::Resource::Type.new(:hostclass, "foo")).to be_valid_parameter("require")
     end
 
     it "should return true if the parameter is named 'name'" do
-      Puppet::Resource::Type.new(:hostclass, "foo").should be_valid_parameter("name")
+      expect(Puppet::Resource::Type.new(:hostclass, "foo")).to be_valid_parameter("name")
     end
 
     it "should return false if it is not a metaparam and was not provided at initialization" do
-      Puppet::Resource::Type.new(:hostclass, "foo").should_not be_valid_parameter("yayness")
+      expect(Puppet::Resource::Type.new(:hostclass, "foo")).not_to be_valid_parameter("yayness")
     end
   end
 
   describe "when setting its parameters in the scope" do
+    def variable_expression(name)
+      varexpr = Puppet::Pops::Model::Factory.QNAME(name).var().current
+      Puppet::Parser::AST::PopsBridge::Expression.new(:value => varexpr)
+    end
+
     before do
       @scope = Puppet::Parser::Scope.new(Puppet::Parser::Compiler.new(Puppet::Node.new("foo")), :source => stub("source"))
       @resource = Puppet::Parser::Resource.new(:foo, "bar", :scope => @scope)
@@ -250,10 +255,9 @@ describe Puppet::Resource::Type do
     ['module_name', 'name', 'title'].each do |variable|
       it "should allow #{variable} to be evaluated as param default" do
         @type.instance_eval { @module_name = "bar" }
-        var = Puppet::Parser::AST::Variable.new({'value' => variable})
-        @type.set_arguments :foo => var
+        @type.set_arguments :foo => variable_expression(variable)
         @type.set_resource_parameters(@resource, @scope)
-        @scope['foo'].should == 'bar'
+        expect(@scope['foo']).to eq('bar')
       end
     end
 
@@ -263,10 +267,9 @@ describe Puppet::Resource::Type do
     it "should allow the resource to override defaults" do
       @type.set_arguments :name => nil
       @resource[:name] = 'foobar'
-      var = Puppet::Parser::AST::Variable.new({'value' => 'name'})
-      @type.set_arguments :foo => var
+      @type.set_arguments :foo => variable_expression('name')
       @type.set_resource_parameters(@resource, @scope)
-      @scope['foo'].should == 'foobar'
+      expect(@scope['foo']).to eq('foobar')
     end
 
     it "should set each of the resource's parameters as variables in the scope" do
@@ -276,8 +279,8 @@ describe Puppet::Resource::Type do
 
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope['foo'].should == "bar"
-      @scope['boo'].should == "baz"
+      expect(@scope['foo']).to eq("bar")
+      expect(@scope['boo']).to eq("baz")
     end
 
     it "should set the variables as strings" do
@@ -286,46 +289,46 @@ describe Puppet::Resource::Type do
 
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope['foo'].should == "bar"
+      expect(@scope['foo']).to eq("bar")
     end
 
     it "should fail if any of the resource's parameters are not valid attributes" do
       @type.set_arguments :foo => nil
       @resource[:boo] = "baz"
 
-      lambda { @type.set_resource_parameters(@resource, @scope) }.should raise_error(Puppet::ParseError)
+      expect { @type.set_resource_parameters(@resource, @scope) }.to raise_error(Puppet::ParseError)
     end
 
     it "should evaluate and set its default values as variables for parameters not provided by the resource" do
-      @type.set_arguments :foo => Puppet::Parser::AST::String.new(:value => "something")
+      @type.set_arguments :foo => Puppet::Parser::AST::Leaf.new(:value => "something")
       @type.set_resource_parameters(@resource, @scope)
-      @scope['foo'].should == "something"
+      expect(@scope['foo']).to eq("something")
     end
 
     it "should set all default values as parameters in the resource" do
-      @type.set_arguments :foo => Puppet::Parser::AST::String.new(:value => "something")
+      @type.set_arguments :foo => Puppet::Parser::AST::Leaf.new(:value => "something")
 
       @type.set_resource_parameters(@resource, @scope)
 
-      @resource[:foo].should == "something"
+      expect(@resource[:foo]).to eq("something")
     end
 
     it "should fail if the resource does not provide a value for a required argument" do
       @type.set_arguments :foo => nil
 
-      lambda { @type.set_resource_parameters(@resource, @scope) }.should raise_error(Puppet::ParseError)
+      expect { @type.set_resource_parameters(@resource, @scope) }.to raise_error(Puppet::ParseError)
     end
 
     it "should set the resource's title as a variable if not otherwise provided" do
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope['title'].should == "bar"
+      expect(@scope['title']).to eq("bar")
     end
 
     it "should set the resource's name as a variable if not otherwise provided" do
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope['name'].should == "bar"
+      expect(@scope['name']).to eq("bar")
     end
 
     it "should set its module name in the scope if available" do
@@ -333,7 +336,7 @@ describe Puppet::Resource::Type do
 
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope["module_name"].should == "mymod"
+      expect(@scope["module_name"]).to eq("mymod")
     end
 
     it "should set its caller module name in the scope if available" do
@@ -341,7 +344,7 @@ describe Puppet::Resource::Type do
 
       @type.set_resource_parameters(@resource, @scope)
 
-      @scope["caller_module_name"].should == "mycaller"
+      expect(@scope["caller_module_name"]).to eq("mycaller")
     end
   end
 
@@ -363,7 +366,7 @@ describe Puppet::Resource::Type do
     end
 
     it "should use the code collection to find the parent resource type" do
-      @child.parent_type(@scope).should equal(@parent)
+      expect(@child.parent_type(@scope)).to equal(@parent)
     end
 
     it "should be able to find parent nodes" do
@@ -372,7 +375,7 @@ describe Puppet::Resource::Type do
       child = Puppet::Resource::Type.new(:node, "foo", :parent => "bar")
       @krt.add child
 
-      child.parent_type(@scope).should equal(parent)
+      expect(child.parent_type(@scope)).to equal(parent)
     end
 
     it "should cache a reference to the parent type" do
@@ -384,7 +387,7 @@ describe Puppet::Resource::Type do
 
     it "should correctly state when it is another type's child" do
       @child.parent_type(@scope)
-      @child.should be_child_of(@parent)
+      expect(@child).to be_child_of(@parent)
     end
 
     it "should be considered the child of a parent's parent" do
@@ -394,14 +397,14 @@ describe Puppet::Resource::Type do
       @child.parent_type(@scope)
       @grandchild.parent_type(@scope)
 
-      @grandchild.should be_child_of(@parent)
+      expect(@grandchild).to be_child_of(@parent)
     end
 
     it "should correctly state when it is not another type's child" do
       @notchild = Puppet::Resource::Type.new(:hostclass, "baz")
       @krt.add @notchild
 
-      @notchild.should_not be_child_of(@parent)
+      expect(@notchild).not_to be_child_of(@parent)
     end
   end
 
@@ -442,13 +445,13 @@ describe Puppet::Resource::Type do
 
     it "should add hostclass names to the classes list" do
       @type.evaluate_code(@resource)
-      @compiler.catalog.classes.should be_include("foo")
+      expect(@compiler.catalog.classes).to be_include("foo")
     end
 
     it "should not add defined resource names to the classes list" do
       @type = Puppet::Resource::Type.new(:definition, "foo")
       @type.evaluate_code(@resource)
-      @compiler.catalog.classes.should_not be_include("foo")
+      expect(@compiler.catalog.classes).not_to be_include("foo")
     end
 
     it "should set all of its parameters in a subscope" do
@@ -469,13 +472,13 @@ describe Puppet::Resource::Type do
 
     it "should store the class scope" do
       @type.evaluate_code(@resource)
-      @scope.class_scope(@type).should be_instance_of(@scope.class)
+      expect(@scope.class_scope(@type)).to be_instance_of(@scope.class)
     end
 
     it "should still create a scope but not store it if the type is a definition" do
       @type = Puppet::Resource::Type.new(:definition, "foo")
       @type.evaluate_code(@resource)
-      @scope.class_scope(@type).should be_nil
+      expect(@scope.class_scope(@type)).to be_nil
     end
 
     it "should evaluate the AST code if any is provided" do
@@ -486,17 +489,6 @@ describe Puppet::Resource::Type do
       code.expects(:safeevaluate).with subscope
 
       @type.evaluate_code(@resource)
-    end
-
-    describe "and ruby code is provided" do
-      it "should create a DSL Resource API and evaluate it" do
-        @type.stubs(:ruby_code).returns(proc { "foo" })
-        @api = stub 'api'
-        Puppet::DSL::ResourceAPI.expects(:new).with { |res, scope, code| code == @type.ruby_code }.returns @api
-        @api.expects(:evaluate)
-
-        @type.evaluate_code(@resource)
-      end
     end
 
     it "should noop if there is no code" do
@@ -522,7 +514,7 @@ describe Puppet::Resource::Type do
 
         @type.evaluate_code(@resource)
 
-        @scope.class_scope(@parent_type).should_not be_nil
+        expect(@scope.class_scope(@parent_type)).not_to be_nil
       end
 
       it "should not evaluate the parent's resource if it has already been evaluated" do
@@ -540,7 +532,7 @@ describe Puppet::Resource::Type do
 
         @type.evaluate_code(@resource)
 
-        @scope.class_scope(@type).parent.object_id.should == @scope.class_scope(@parent_type).object_id
+        expect(@scope.class_scope(@type).parent.object_id).to eq(@scope.class_scope(@parent_type).object_id)
       end
     end
 
@@ -562,7 +554,7 @@ describe Puppet::Resource::Type do
 
         @type.evaluate_code(@resource)
 
-        @scope.class_scope(@parent_type).should_not be_nil
+        expect(@scope.class_scope(@parent_type)).not_to be_nil
       end
 
       it "should not evaluate the parent's resource if it has already been evaluated" do
@@ -580,83 +572,82 @@ describe Puppet::Resource::Type do
 
         @type.evaluate_code(@resource)
 
-        @scope.class_scope(@type).parent.object_id.should == @scope.class_scope(@parent_type).object_id
+        expect(@scope.class_scope(@type).parent.object_id).to eq(@scope.class_scope(@parent_type).object_id)
       end
     end
   end
 
   describe "when creating a resource" do
     before do
-      @node = Puppet::Node.new("foo", :environment => 'env')
+      env = Puppet::Node::Environment.create('env', [])
+      @node = Puppet::Node.new("foo", :environment => env)
       @compiler = Puppet::Parser::Compiler.new(@node)
       @scope = Puppet::Parser::Scope.new(@compiler)
 
       @top = Puppet::Resource::Type.new :hostclass, "top"
       @middle = Puppet::Resource::Type.new :hostclass, "middle", :parent => "top"
 
-      @code = Puppet::Resource::TypeCollection.new("env")
+      @code = env.known_resource_types
       @code.add @top
       @code.add @middle
-
-      @node.environment.stubs(:known_resource_types).returns(@code)
     end
 
     it "should create a resource instance" do
-      @top.ensure_in_catalog(@scope).should be_instance_of(Puppet::Parser::Resource)
+      expect(@top.ensure_in_catalog(@scope)).to be_instance_of(Puppet::Parser::Resource)
     end
 
     it "should set its resource type to 'class' when it is a hostclass" do
-      Puppet::Resource::Type.new(:hostclass, "top").ensure_in_catalog(@scope).type.should == "Class"
+      expect(Puppet::Resource::Type.new(:hostclass, "top").ensure_in_catalog(@scope).type).to eq("Class")
     end
 
     it "should set its resource type to 'node' when it is a node" do
-      Puppet::Resource::Type.new(:node, "top").ensure_in_catalog(@scope).type.should == "Node"
+      expect(Puppet::Resource::Type.new(:node, "top").ensure_in_catalog(@scope).type).to eq("Node")
     end
 
     it "should fail when it is a definition" do
-      lambda { Puppet::Resource::Type.new(:definition, "top").ensure_in_catalog(@scope) }.should raise_error(ArgumentError)
+      expect { Puppet::Resource::Type.new(:definition, "top").ensure_in_catalog(@scope) }.to raise_error(ArgumentError)
     end
 
     it "should add the created resource to the scope's catalog" do
       @top.ensure_in_catalog(@scope)
 
-      @compiler.catalog.resource(:class, "top").should be_instance_of(Puppet::Parser::Resource)
+      expect(@compiler.catalog.resource(:class, "top")).to be_instance_of(Puppet::Parser::Resource)
     end
 
     it "should add specified parameters to the resource" do
       @top.ensure_in_catalog(@scope, {'one'=>'1', 'two'=>'2'})
-      @compiler.catalog.resource(:class, "top")['one'].should == '1'
-      @compiler.catalog.resource(:class, "top")['two'].should == '2'
+      expect(@compiler.catalog.resource(:class, "top")['one']).to eq('1')
+      expect(@compiler.catalog.resource(:class, "top")['two']).to eq('2')
     end
 
     it "should not require params for a param class" do
       @top.ensure_in_catalog(@scope, {})
-      @compiler.catalog.resource(:class, "top").should be_instance_of(Puppet::Parser::Resource)
+      expect(@compiler.catalog.resource(:class, "top")).to be_instance_of(Puppet::Parser::Resource)
     end
 
     it "should evaluate the parent class if one exists" do
       @middle.ensure_in_catalog(@scope)
 
-      @compiler.catalog.resource(:class, "top").should be_instance_of(Puppet::Parser::Resource)
+      expect(@compiler.catalog.resource(:class, "top")).to be_instance_of(Puppet::Parser::Resource)
     end
 
     it "should evaluate the parent class if one exists" do
       @middle.ensure_in_catalog(@scope, {})
 
-      @compiler.catalog.resource(:class, "top").should be_instance_of(Puppet::Parser::Resource)
+      expect(@compiler.catalog.resource(:class, "top")).to be_instance_of(Puppet::Parser::Resource)
     end
 
     it "should fail if you try to create duplicate class resources" do
       othertop = Puppet::Parser::Resource.new(:class, 'top',:source => @source, :scope => @scope )
       # add the same class resource to the catalog
       @compiler.catalog.add_resource(othertop)
-      lambda { @top.ensure_in_catalog(@scope, {}) }.should raise_error(Puppet::Resource::Catalog::DuplicateResourceError)
+      expect { @top.ensure_in_catalog(@scope, {}) }.to raise_error(Puppet::Resource::Catalog::DuplicateResourceError)
     end
 
     it "should fail to evaluate if a parent class is defined but cannot be found" do
       othertop = Puppet::Resource::Type.new :hostclass, "something", :parent => "yay"
       @code.add othertop
-      lambda { othertop.ensure_in_catalog(@scope) }.should raise_error(Puppet::ParseError)
+      expect { othertop.ensure_in_catalog(@scope) }.to raise_error(Puppet::ParseError)
     end
 
     it "should not create a new resource if one already exists" do
@@ -668,7 +659,7 @@ describe Puppet::Resource::Type do
     it "should return the existing resource when not creating a new one" do
       @compiler.catalog.expects(:resource).with(:class, "top").returns("something")
       @compiler.catalog.expects(:add_resource).never
-      @top.ensure_in_catalog(@scope).should == "something"
+      expect(@top.ensure_in_catalog(@scope)).to eq("something")
     end
 
     it "should not create a new parent resource if one already exists and it has a parent class" do
@@ -678,36 +669,36 @@ describe Puppet::Resource::Type do
 
       @middle.ensure_in_catalog(@scope)
 
-      @compiler.catalog.resource(:class, "top").should equal(top_resource)
+      expect(@compiler.catalog.resource(:class, "top")).to equal(top_resource)
     end
 
     # #795 - tag before evaluation.
     it "should tag the catalog with the resource tags when it is evaluated" do
       @middle.ensure_in_catalog(@scope)
 
-      @compiler.catalog.should be_tagged("middle")
+      expect(@compiler.catalog).to be_tagged("middle")
     end
 
     it "should tag the catalog with the parent class tags when it is evaluated" do
       @middle.ensure_in_catalog(@scope)
 
-      @compiler.catalog.should be_tagged("top")
+      expect(@compiler.catalog).to be_tagged("top")
     end
   end
 
   describe "when merging code from another instance" do
     def code(str)
-      Puppet::Parser::AST::Leaf.new :value => str
+      factory = Puppet::Pops::Model::Factory.literal(str)
     end
 
     it "should fail unless it is a class" do
-      lambda { Puppet::Resource::Type.new(:node, "bar").merge("foo") }.should raise_error(Puppet::Error)
+      expect { Puppet::Resource::Type.new(:node, "bar").merge("foo") }.to raise_error(Puppet::Error)
     end
 
     it "should fail unless the source instance is a class" do
       dest = Puppet::Resource::Type.new(:hostclass, "bar")
       source = Puppet::Resource::Type.new(:node, "foo")
-      lambda { dest.merge(source) }.should raise_error(Puppet::Error)
+      expect { dest.merge(source) }.to raise_error(Puppet::Error)
     end
 
     it "should fail if both classes have different parent classes" do
@@ -716,7 +707,7 @@ describe Puppet::Resource::Type do
         code.add Puppet::Resource::Type.new(:hostclass, parent)
         code.add Puppet::Resource::Type.new(:hostclass, child, :parent => parent)
       end
-      lambda { code.hostclass("b").merge(code.hostclass("d")) }.should raise_error(Puppet::Error)
+      expect { code.hostclass("b").merge(code.hostclass("d")) }.to raise_error(Puppet::Error)
     end
 
     it "should fail if it's named 'main' and 'freeze_main' is enabled" do
@@ -724,7 +715,7 @@ describe Puppet::Resource::Type do
       code = Puppet::Resource::TypeCollection.new("env")
       code.add Puppet::Resource::Type.new(:hostclass, "")
       other = Puppet::Resource::Type.new(:hostclass, "")
-      lambda { code.hostclass("").merge(other) }.should raise_error(Puppet::Error)
+      expect { code.hostclass("").merge(other) }.to raise_error(Puppet::Error)
     end
 
     it "should copy the other class's parent if it has not parent" do
@@ -734,7 +725,7 @@ describe Puppet::Resource::Type do
       source = Puppet::Resource::Type.new(:hostclass, "foo", :parent => "parent")
       dest.merge(source)
 
-      dest.parent.should == "parent"
+      expect(dest.parent).to eq("parent")
     end
 
     it "should copy the other class's documentation as its docs if it has no docs" do
@@ -742,7 +733,7 @@ describe Puppet::Resource::Type do
       source = Puppet::Resource::Type.new(:hostclass, "foo", :doc => "yayness")
       dest.merge(source)
 
-      dest.doc.should == "yayness"
+      expect(dest.doc).to eq("yayness")
     end
 
     it "should append the other class's docs to its docs if it has any" do
@@ -750,7 +741,7 @@ describe Puppet::Resource::Type do
       source = Puppet::Resource::Type.new(:hostclass, "foo", :doc => "yayness")
       dest.merge(source)
 
-      dest.doc.should == "foonessyayness"
+      expect(dest.doc).to eq("foonessyayness")
     end
 
     it "should set the other class's code as its code if it has none" do
@@ -759,10 +750,15 @@ describe Puppet::Resource::Type do
 
       dest.merge(source)
 
-      dest.code.value.should == "bar"
+      expect(dest.code.value).to eq("bar")
     end
 
     it "should append the other class's code to its code if it has any" do
+      # PUP-3274, the code merging at the top still uses AST::BlockExpression
+      # But does not do mutating changes to code blocks, instead a new block is created
+      # with references to the two original blocks.
+      # TODO: fix this when the code merging is changed at the very top in 4x.
+      #
       dcode = Puppet::Parser::AST::BlockExpression.new(:children => [code("dest")])
       dest = Puppet::Resource::Type.new(:hostclass, "bar", :code => dcode)
 
@@ -770,8 +766,7 @@ describe Puppet::Resource::Type do
       source = Puppet::Resource::Type.new(:hostclass, "foo", :code => scode)
 
       dest.merge(source)
-
-      dest.code.children.collect { |l| l.value }.should == %w{dest source}
+      expect(dest.code.children.collect { |l| l.children[0].value }).to eq(%w{dest source})
     end
   end
 end

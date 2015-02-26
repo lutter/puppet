@@ -49,13 +49,21 @@ module Puppet::Test
       #
       @@reentry_count ||= 0
 
+      @environmentpath = Dir.mktmpdir('environments')
+      Dir.mkdir("#{@environmentpath}/production")
       owner = Process.pid
       Puppet.push_context(Puppet.base_context({
-        :environmentpath => "",
+        :environmentpath => @environmentpath,
         :basemodulepath => "",
-        :manifest => "/dev/null"
       }), "Initial for specs")
       Puppet::Parser::Functions.reset
+
+      ObjectSpace.define_finalizer(Puppet.lookup(:environments), proc {
+        if Process.pid == owner
+          FileUtils.rm_rf(@environmentpath)
+        end
+      })
+      Puppet::SSL::Oids.register_puppet_oids
     end
 
     # Call this method once, when beginning a test run--prior to running
@@ -128,7 +136,6 @@ module Puppet::Test
         "Context for specs")
 
       Puppet::Parser::Functions.reset
-      Puppet::Node::Environment.clear
       Puppet::Application.clear!
       Puppet::Util::Profiler.clear
 
@@ -172,15 +179,6 @@ module Puppet::Test
         ENV.clear
         $old_env.each {|k, v| ENV[k] = v }
       end
-
-
-      # Some tests can cause us to connect, in which case the lingering
-      # connection is a resource that can cause unexpected failure in later
-      # tests, as well as sharing state accidentally.
-      # We're testing if ActiveRecord::Base is defined because some test cases
-      # may stub Puppet.features.rails? which is how we should normally
-      # introspect for this functionality.
-      ActiveRecord::Base.remove_connection if defined?(ActiveRecord::Base)
 
       # Restore the load_path late, to avoid messing with stubs from the test.
       $LOAD_PATH.clear

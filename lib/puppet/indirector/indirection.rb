@@ -3,7 +3,6 @@ require 'puppet/util/profiler'
 require 'puppet/util/methodhelper'
 require 'puppet/indirector/envelope'
 require 'puppet/indirector/request'
-require 'puppet/util/instrumentation/instrumentable'
 
 # The class that connects functional classes with their different collection
 # back-ends.  Each indirection has a set of associated terminus classes,
@@ -11,15 +10,9 @@ require 'puppet/util/instrumentation/instrumentable'
 class Puppet::Indirector::Indirection
   include Puppet::Util::MethodHelper
   include Puppet::Util::Docs
-  extend Puppet::Util::Instrumentation::Instrumentable
 
   attr_accessor :name, :model
   attr_reader :termini
-
-  probe :find, :label => Proc.new { |parent, key, *args| "find_#{parent.name}_#{parent.terminus_class}" }, :data => Proc.new { |parent, key, *args| { :key => key }}
-  probe :save, :label => Proc.new { |parent, key, *args| "save_#{parent.name}_#{parent.terminus_class}" }, :data => Proc.new { |parent, key, *args| { :key => key }}
-  probe :search, :label => Proc.new { |parent, key, *args| "search_#{parent.name}_#{parent.terminus_class}" }, :data => Proc.new { |parent, key, *args| { :key => key }}
-  probe :destroy, :label => Proc.new { |parent, key, *args| "destroy_#{parent.name}_#{parent.terminus_class}" }, :data => Proc.new { |parent, key, *args| { :key => key }}
 
   @@indirections = []
 
@@ -301,7 +294,7 @@ class Puppet::Indirector::Indirection
     return unless terminus.respond_to?(:authorized?)
 
     unless terminus.authorized?(request)
-      msg = "Not authorized to call #{request.method} on #{request}"
+      msg = "Not authorized to call #{request.method} on #{request.description}"
       msg += " with #{request.options.inspect}" unless request.options.empty?
       raise ArgumentError, msg
     end
@@ -312,7 +305,7 @@ class Puppet::Indirector::Indirection
     # Pick our terminus.
     if respond_to?(:select_terminus)
       unless terminus_name = select_terminus(request)
-        raise ArgumentError, "Could not determine appropriate terminus for #{request}"
+        raise ArgumentError, "Could not determine appropriate terminus for #{request.description}"
       end
     else
       terminus_name = terminus_class

@@ -105,6 +105,7 @@ class Puppet::Transaction
     overly_deferred_resource_handler = lambda do |resource|
       # We don't automatically assign unsuitable providers, so if there
       # is one, it must have been selected by the user.
+      return if missing_tags?(resource)
       if resource.provider
         resource.err "Provider #{resource.provider.class.name} is not functional on this host"
       else
@@ -211,13 +212,13 @@ class Puppet::Transaction
   def eval_resource(resource, ancestor = nil)
     if skip?(resource)
       resource_status(resource).skipped = true
+      resource.debug("Resource is being skipped, unscheduling all events")
+      event_manager.dequeue_all_events_for_resource(resource)
     else
       resource_status(resource).scheduled = true
       apply(resource, ancestor)
+      event_manager.process_events(resource)
     end
-
-    # Check to see if there are any events queued for this resource
-    event_manager.process_events(resource)
   end
 
   def failed?(resource)
@@ -283,7 +284,7 @@ class Puppet::Transaction
 
   def resources_by_provider(type_name, provider_name)
     unless @resources_by_provider
-      @resources_by_provider = Hash.new { |h, k| h[k] = Hash.new { |h, k| h[k] = {} } }
+      @resources_by_provider = Hash.new { |h, k| h[k] = Hash.new { |h1, k1| h1[k1] = {} } }
 
       @catalog.vertices.each do |resource|
         if resource.class.attrclass(:provider)
@@ -304,7 +305,7 @@ class Puppet::Transaction
     Puppet.debug "Prefetching #{provider_class.name} resources for #{type_name}"
     begin
       provider_class.prefetch(resources)
-    rescue => detail
+    rescue LoadError, Puppet::MissingCommand => detail
       Puppet.log_exception(detail, "Could not prefetch #{type_name} provider '#{provider_class.name}': #{detail}")
     end
     @prefetched_providers[type_name][provider_class.name] = true
@@ -349,13 +350,6 @@ class Puppet::Transaction
     resource.appliable_to_host? && resource.appliable_to_device?
   end
 
-  def handle_qualified_tags( qualified )
-    # The default behavior of Puppet::Util::Tagging is
-    # to split qualified tags into parts. That would cause
-    # qualified tags to match too broadly here.
-    return
-  end
-
   # Is this resource tagged appropriately?
   def missing_tags?(resource)
     return false if ignore_tags?
@@ -363,6 +357,14 @@ class Puppet::Transaction
 
     not resource.tagged?(*tags)
   end
+
+  # These two methods are only made public to enable the existing spec tests to run
+  # under rspec 3 (apparently rspec 2 didn't enforce access controls?). Please do not
+  # treat these as part of a public API.
+  # Possible future improvement: rewrite to not require access to private methods.
+  public :skip?
+  public :missing_tags?
+
 end
 
 require 'puppet/transaction/report'

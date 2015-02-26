@@ -3,7 +3,6 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
   Puppet::Type.loadall
 
   Puppet::Type.eachtype { |type|
-    next if type.name == :puppet
     next if type.name == :component
     next if type.name == :whit
     types[type.name] = type
@@ -21,9 +20,9 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
   In the following code:
 
       file { "/etc/passwd":
-        owner => root,
-        group => root,
-        mode  => 644
+        owner => "root",
+        group => "root",
+        mode  => "0644"
       }
 
   `/etc/passwd` is considered the title of the file object (used for things like
@@ -95,19 +94,18 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
     str << markdown_header("Parameters", 4) + "\n"
     type.parameters.sort { |a,b|
       a.to_s <=> b.to_s
-    }.each { |name,param|
-      #docs[name] = indent(scrub(type.paramdoc(name)), $tab)
-      docs[name] = scrub(type.paramdoc(name))
+    }.each { |type_name, param|
+      docs[type_name] = scrub(type.paramdoc(type_name))
     }
 
     additional_key_attributes = type.key_attributes - [:name]
     docs.sort { |a, b|
       a[0].to_s <=> b[0].to_s
-    }.each { |name, doc|
-      if additional_key_attributes.include?(name)
+    }.each { |type_name, doc|
+      if additional_key_attributes.include?(type_name)
         doc = "(**Namevar:** If omitted, this parameter's value defaults to the resource's title.)\n\n" + doc
       end
-      str << markdown_definitionlist(name, doc)
+      str << markdown_definitionlist(type_name, doc)
     }
     str << "\n"
   }

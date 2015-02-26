@@ -148,20 +148,18 @@ Puppet::Type.newtype(:file) do
         The `source` attribute is not mandatory when using `recurse => true`, so you
         can enable purging in directories where all files are managed individually.
 
-        (Note: `inf` is a deprecated synonym for `true`.)
-
       By default, setting recurse to `remote` or `true` will manage _all_
       subdirectories. You can use the `recurselimit` attribute to limit the
       recursion depth.
     "
 
-    newvalues(:true, :false, :inf, :remote)
+    newvalues(:true, :false, :remote)
 
     validate { |arg| }
     munge do |value|
       newval = super(value)
       case newval
-      when :true, :inf; true
+      when :true; true
       when :false; false
       when :remote; :remote
       else
@@ -380,6 +378,11 @@ Puppet::Type.newtype(:file) do
     end
 
     self.warning "Possible error: recurselimit is set but not recurse, no recursion will happen" if !self[:recurse] and self[:recurselimit]
+
+    if @parameters[:content] && @parameters[:content].actual_content
+      # Now that we know the checksum, update content (in case it was created before checksum was known).
+      @parameters[:content].value = @parameters[:checksum].sum(@parameters[:content].actual_content)
+    end
 
     provider.validate if provider.respond_to?(:validate)
   end
@@ -671,7 +674,7 @@ Puppet::Type.newtype(:file) do
       :recurselimit => self[:recurselimit],
       :ignore => self[:ignore],
       :checksum_type => (self[:source] || self[:content]) ? self[:checksum] : :none,
-      :environment => catalog.environment
+      :environment => catalog.environment_instance
     )
   end
 

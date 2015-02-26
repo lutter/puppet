@@ -115,8 +115,10 @@ module Puppet::Util::Execution
   # @param options [Hash] a Hash of options
   # @option options [Boolean]  :failonfail if this value is set to true, then this method will raise an error if the
   #   command is not executed successfully.
-  # @option options [Integer, String] :uid (nil) the user id of the user that the process should be run as
-  # @option options [Integer, String] :gid (nil) the group id of the group that the process should be run as
+  # @option options [Integer, String] :uid (nil) the user id of the user that the process should be run as. Will be ignored if the
+  #   user id matches the effective user id of the current process.
+  # @option options [Integer, String] :gid (nil) the group id of the group that the process should be run as. Will be ignored if the
+  #   group id matches the effective group id of the current process.
   # @option options [Boolean] :combine sets whether or not to combine stdout/stderr in the output
   # @option options [String] :stdinfile (nil) sets a file that can be used for stdin. Passing a string for stdin is not currently
   #   supported.
@@ -161,10 +163,21 @@ module Puppet::Util::Execution
       str = command
     end
 
+    user_log_s = ''
+    if options[:uid]
+      user_log_s << " uid=#{options[:uid]}"
+    end
+    if options[:gid]
+      user_log_s << " gid=#{options[:gid]}"
+    end
+    if user_log_s != ''
+      user_log_s.prepend(' with')
+    end
+
     if respond_to? :debug
-      debug "Executing '#{str}'"
+      debug "Executing#{user_log_s}: '#{str}'"
     else
-      Puppet.debug "Executing '#{str}'"
+      Puppet.debug "Executing#{user_log_s}: '#{str}'"
     end
 
     null_file = Puppet.features.microsoft_windows? ? 'NUL' : '/dev/null'
@@ -203,7 +216,7 @@ module Puppet::Util::Execution
         raise Puppet::ExecutionFailure, "Execution of '#{str}' returned #{exit_status}: #{output.strip}"
       end
     ensure
-      if !options[:squelch]
+      if !options[:squelch] && stdout
         # if we opened a temp file for stdout, we need to clean it up.
         stdout.close!
       end

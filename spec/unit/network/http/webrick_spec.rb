@@ -5,7 +5,7 @@ require 'puppet/network/http/webrick'
 
 describe Puppet::Network::HTTP::WEBrick, "after initializing" do
   it "should not be listening" do
-    Puppet::Network::HTTP::WEBrick.new.should_not be_listening
+    expect(Puppet::Network::HTTP::WEBrick.new).not_to be_listening
   end
 end
 
@@ -22,6 +22,10 @@ describe Puppet::Network::HTTP::WEBrick do
     s
   end
 
+  let(:mock_ssl_context) do
+    stub('ssl_context', :ciphers= => nil)
+  end
+
   let(:mock_webrick) do
     stub('webrick',
          :[] => {},
@@ -29,7 +33,8 @@ describe Puppet::Network::HTTP::WEBrick do
          :status => :Running,
          :mount => nil,
          :start => nil,
-         :shutdown => nil)
+         :shutdown => nil,
+         :ssl_context => mock_ssl_context)
   end
 
   before :each do
@@ -80,7 +85,7 @@ describe Puppet::Network::HTTP::WEBrick do
 
     it "should be listening" do
       server.listen(address, port)
-      server.should be_listening
+      expect(server).to be_listening
     end
 
     describe "when the REST protocol is requested" do
@@ -107,7 +112,7 @@ describe Puppet::Network::HTTP::WEBrick do
     it "should no longer be listening" do
       server.listen(address, port)
       server.unlisten
-      server.should_not be_listening
+      expect(server).not_to be_listening
     end
   end
 
@@ -127,20 +132,9 @@ describe Puppet::Network::HTTP::WEBrick do
       server.setup_logger
     end
 
-    it "should use the masterhttplog if the run_mode is master" do
-      Puppet.run_mode.stubs(:master?).returns(true)
+    it "should use the masterhttplog" do
       log = make_absolute("/master/log")
       Puppet[:masterhttplog] = log
-
-      File.expects(:open).with(log, "a+").returns @filehandle
-
-      server.setup_logger
-    end
-
-    it "should use the httplog if the run_mode is not master" do
-      Puppet.run_mode.stubs(:master?).returns(false)
-      log = make_absolute("/other/log")
-      Puppet[:httplog] = log
 
       File.expects(:open).with(log, "a+").returns @filehandle
 
@@ -183,17 +177,17 @@ describe Puppet::Network::HTTP::WEBrick do
       logger = mock 'logger'
       WEBrick::Log.expects(:new).returns logger
 
-      server.setup_logger[:Logger].should == logger
+      expect(server.setup_logger[:Logger]).to eq(logger)
     end
 
     it "should return the logger as the access log using both the Common and Referer log format" do
       logger = mock 'logger'
       WEBrick::Log.expects(:new).returns logger
 
-      server.setup_logger[:AccessLog].should == [
+      expect(server.setup_logger[:AccessLog]).to eq([
         [logger, WEBrick::AccessLog::COMMON_LOG_FORMAT],
         [logger, WEBrick::AccessLog::REFERER_LOG_FORMAT]
-      ]
+      ])
     end
   end
 
@@ -214,11 +208,11 @@ describe Puppet::Network::HTTP::WEBrick do
       Puppet::SSL::Host.expects(:localhost).returns host
       host.expects(:key).returns key
 
-      server.setup_ssl[:SSLPrivateKey].should == "mykey"
+      expect(server.setup_ssl[:SSLPrivateKey]).to eq("mykey")
     end
 
     it "should configure the certificate" do
-      server.setup_ssl[:SSLCertificate].should == "mycert"
+      expect(server.setup_ssl[:SSLCertificate]).to eq("mycert")
     end
 
     it "should fail if no CA certificate can be found" do
@@ -231,7 +225,7 @@ describe Puppet::Network::HTTP::WEBrick do
       Puppet.settings[:hostcrl] = 'false'
       Puppet.settings[:localcacert] = localcacert
 
-      server.setup_ssl[:SSLCACertificateFile].should == localcacert
+      expect(server.setup_ssl[:SSLCACertificateFile]).to eq(localcacert)
     end
 
     it "should specify the path to the CA certificate" do
@@ -239,33 +233,47 @@ describe Puppet::Network::HTTP::WEBrick do
       Puppet.settings[:localcacert] = localcacert
       Puppet.settings[:ssl_server_ca_auth] = ssl_server_ca_auth
 
-      server.setup_ssl[:SSLCACertificateFile].should == ssl_server_ca_auth
+      expect(server.setup_ssl[:SSLCACertificateFile]).to eq(ssl_server_ca_auth)
     end
 
     it "should start ssl immediately" do
-      server.setup_ssl[:SSLStartImmediately].should be_true
+      expect(server.setup_ssl[:SSLStartImmediately]).to be_truthy
     end
 
     it "should enable ssl" do
-      server.setup_ssl[:SSLEnable].should be_true
+      expect(server.setup_ssl[:SSLEnable]).to be_truthy
     end
 
     it "should reject SSLv2" do
-      server.setup_ssl[:SSLOptions].should == OpenSSL::SSL::OP_NO_SSLv2
+      options = server.setup_ssl[:SSLOptions]
+
+      expect(options & OpenSSL::SSL::OP_NO_SSLv2).to eq(OpenSSL::SSL::OP_NO_SSLv2)
+    end
+
+    it "should reject SSLv3" do
+      options = server.setup_ssl[:SSLOptions]
+
+      expect(options & OpenSSL::SSL::OP_NO_SSLv3).to eq(OpenSSL::SSL::OP_NO_SSLv3)
     end
 
     it "should configure the verification method as 'OpenSSL::SSL::VERIFY_PEER'" do
-      server.setup_ssl[:SSLVerifyClient].should == OpenSSL::SSL::VERIFY_PEER
+      expect(server.setup_ssl[:SSLVerifyClient]).to eq(OpenSSL::SSL::VERIFY_PEER)
     end
 
     it "should add an x509 store" do
       host.expects(:ssl_store).returns "mystore"
 
-      server.setup_ssl[:SSLCertificateStore].should == "mystore"
+      expect(server.setup_ssl[:SSLCertificateStore]).to eq("mystore")
     end
 
     it "should set the certificate name to 'nil'" do
-      server.setup_ssl[:SSLCertName].should be_nil
+      expect(server.setup_ssl[:SSLCertName]).to be_nil
+    end
+
+    it "specifies the allowable ciphers" do
+      mock_ssl_context.expects(:ciphers=).with(server.class::CIPHERS)
+
+      server.create_server('localhost', '8888')
     end
   end
 end

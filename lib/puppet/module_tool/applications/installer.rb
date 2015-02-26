@@ -57,11 +57,11 @@ module Puppet::ModuleTool
         results = { :action => :install, :module_name => name, :module_version => version }
 
         begin
-          if mod = installed_modules[name]
+          if installed_module = installed_modules[name]
             unless forced?
-              if Semantic::VersionRange.parse(version).include? mod.version
+              if Semantic::VersionRange.parse(version).include? installed_module.version
                 results[:result] = :noop
-                results[:version] = mod.version
+                results[:version] = installed_module.version
                 return results
               else
                 changes = Checksummer.run(installed_modules[name].mod.path) rescue []
@@ -101,19 +101,17 @@ module Puppet::ModuleTool
               # Since upgrading already installed modules can be troublesome,
               # we'll place constraints on the graph for each installed module,
               # locking it to upgrades within the same major version.
-              ">=#{version} #{version.major}.x".tap do |range|
-                graph.add_constraint('installed', mod, range) do |node|
-                  Semantic::VersionRange.parse(range).include? node.version
-                end
+              installed_range = ">=#{version} #{version.major}.x"
+              graph.add_constraint('installed', mod, installed_range) do |node|
+                Semantic::VersionRange.parse(installed_range).include? node.version
               end
 
               release.mod.dependencies.each do |dep|
                 dep_name = dep['name'].tr('/', '-')
 
-                dep['version_requirement'].tap do |range|
-                  graph.add_constraint("#{mod} constraint", dep_name, range) do |node|
-                    Semantic::VersionRange.parse(range).include? node.version
-                  end
+                range = dep['version_requirement']
+                graph.add_constraint("#{mod} constraint", dep_name, range) do |node|
+                  Semantic::VersionRange.parse(range).include? node.version
                 end
               end
             end
@@ -135,8 +133,8 @@ module Puppet::ModuleTool
           unless forced?
             # Check for module name conflicts.
             releases.each do |rel|
-              if mod = installed_modules_source.by_name[rel.name.split('-').last]
-                next if mod.has_metadata? && mod.forge_name.tr('/', '-') == rel.name
+              if installed_module = installed_modules_source.by_name[rel.name.split('-').last]
+                next if installed_module.has_metadata? && installed_module.forge_name.tr('/', '-') == rel.name
 
                 if rel.name != name
                   dependency = {
@@ -149,8 +147,8 @@ module Puppet::ModuleTool
                   :requested_module  => name,
                   :requested_version => options[:version] || 'latest',
                   :dependency        => dependency,
-                  :directory         => mod.path,
-                  :metadata          => mod.metadata
+                  :directory         => installed_module.path,
+                  :metadata          => installed_module.metadata
               end
             end
           end

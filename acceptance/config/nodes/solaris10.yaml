@@ -2,19 +2,17 @@ HOSTS:
   master:
     roles:
       - master
-      - agent
-    platform: solaris-10-x86_64
+    platform: el-7-x86_64
     hypervisor: vcloud
-    template: Delivery/Quality Assurance/Templates/vCloud/solaris-10-x86_64
+    template: redhat-7-x86_64
   agent:
     roles:
       - agent
     platform: solaris-10-x86_64
     hypervisor: vcloud
-    template: Delivery/Quality Assurance/Templates/vCloud/solaris-10-x86_64 
+    template: solaris-10-x86_64
 CONFIG:
-  filecount: 12
   datastore: instance0
   resourcepool: delivery/Quality Assurance/FOSS/Dynamic
   folder: Delivery/Quality Assurance/FOSS/Dynamic
-  pooling_api: http://vcloud.delivery.puppetlabs.net/
+  pooling_api: http://vmpooler.delivery.puppetlabs.net/

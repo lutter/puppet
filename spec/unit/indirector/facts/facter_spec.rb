@@ -2,24 +2,25 @@
 require 'spec_helper'
 require 'puppet/indirector/facts/facter'
 
+module NodeFactsFacterSpec
 describe Puppet::Node::Facts::Facter do
   FS = Puppet::FileSystem
 
   it "should be a subclass of the Code terminus" do
-    Puppet::Node::Facts::Facter.superclass.should equal(Puppet::Indirector::Code)
+    expect(Puppet::Node::Facts::Facter.superclass).to equal(Puppet::Indirector::Code)
   end
 
   it "should have documentation" do
-    Puppet::Node::Facts::Facter.doc.should_not be_nil
+    expect(Puppet::Node::Facts::Facter.doc).not_to be_nil
   end
 
   it "should be registered with the configuration store indirection" do
     indirection = Puppet::Indirector::Indirection.instance(:facts)
-    Puppet::Node::Facts::Facter.indirection.should equal(indirection)
+    expect(Puppet::Node::Facts::Facter.indirection).to equal(indirection)
   end
 
   it "should have its name set to :facter" do
-    Puppet::Node::Facts::Facter.name.should == :facter
+    expect(Puppet::Node::Facts::Facter.name).to eq(:facter)
   end
 
   before :each do
@@ -60,17 +61,17 @@ describe Puppet::Node::Facts::Facter do
     end
 
     it "should return a Facts instance" do
-      @facter.find(@request).should be_instance_of(Puppet::Node::Facts)
+      expect(@facter.find(@request)).to be_instance_of(Puppet::Node::Facts)
     end
 
     it "should return a Facts instance with the provided key as the name" do
-      @facter.find(@request).name.should == @name
+      expect(@facter.find(@request).name).to eq(@name)
     end
 
     it "should return the Facter facts as the values in the Facts instance" do
       Facter.expects(:to_hash).returns("one" => "two")
       facts = @facter.find(@request)
-      facts.values["one"].should == "two"
+      expect(facts.values["one"]).to eq("two")
     end
 
     it "should add local facts" do
@@ -81,17 +82,7 @@ describe Puppet::Node::Facts::Facter do
       @facter.find(@request)
     end
 
-    it "should convert facts into strings when stringify_facts is true" do
-      Puppet[:stringify_facts] = true
-      facts = Puppet::Node::Facts.new("foo")
-      Puppet::Node::Facts.expects(:new).returns facts
-      facts.expects(:stringify)
-
-      @facter.find(@request)
-    end
-
-    it "should sanitize facts when stringify_facts is false" do
-      Puppet[:stringify_facts] = false
+    it "should sanitize facts" do
       facts = Puppet::Node::Facts.new("foo")
       Puppet::Node::Facts.expects(:new).returns facts
       facts.expects(:sanitize)
@@ -101,11 +92,11 @@ describe Puppet::Node::Facts::Facter do
   end
 
   it 'should fail when saving facts' do
-    proc { @facter.save(@facts) }.should raise_error(Puppet::DevError)
+    expect { @facter.save(@facts) }.to raise_error(Puppet::DevError)
   end
 
   it 'should fail when destroying facts' do
-    proc { @facter.destroy(@facts) }.should raise_error(Puppet::DevError)
+    expect { @facter.destroy(@facts) }.to raise_error(Puppet::DevError)
   end
 
   describe 'when setting up search paths' do
@@ -165,4 +156,5 @@ describe Puppet::Node::Facts::Facter do
       Puppet::Node::Facts::Facter.setup_external_search_paths @request
     end
   end
+end
 end

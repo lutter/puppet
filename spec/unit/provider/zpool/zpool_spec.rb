@@ -27,15 +27,15 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
 
   describe "self.instances" do
     it "should have an instances method" do
-      provider.class.should respond_to(:instances)
+      expect(provider.class).to respond_to(:instances)
     end
 
     it "should list instances" do
       provider.class.expects(:zpool).with(:list,'-H').returns File.read(my_fixture('zpool-list.out'))
       instances = provider.class.instances.map { |p| {:name => p.get(:name), :ensure => p.get(:ensure)} }
-      instances.size.should == 2
-      instances[0].should == {:name => 'rpool', :ensure => :present}
-      instances[1].should == {:name => 'mypool', :ensure => :present}
+      expect(instances.size).to eq(2)
+      expect(instances[0]).to eq({:name => 'rpool', :ensure => :present})
+      expect(instances[1]).to eq({:name => 'mypool', :ensure => :present})
     end
   end
 
@@ -54,77 +54,77 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
 
     describe "when there is no data" do
       it "should return a hash with ensure=>:absent" do
-        provider.process_zpool_data([])[:ensure].should == :absent
+        expect(provider.process_zpool_data([])[:ensure]).to eq(:absent)
       end
     end
 
     describe "when there is a spare" do
       it "should add the spare disk to the hash" do
         zpool_data.concat ["spares", "spare_disk"]
-        provider.process_zpool_data(zpool_data)[:spare].should == ["spare_disk"]
+        expect(provider.process_zpool_data(zpool_data)[:spare]).to eq(["spare_disk"])
       end
     end
 
     describe "when there are two spares" do
       it "should add the spare disk to the hash as a single string" do
         zpool_data.concat ["spares", "spare_disk", "spare_disk2"]
-        provider.process_zpool_data(zpool_data)[:spare].should == ["spare_disk spare_disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:spare]).to eq(["spare_disk spare_disk2"])
       end
     end
 
     describe "when there is a log" do
       it "should add the log disk to the hash" do
         zpool_data.concat ["logs", "log_disk"]
-        provider.process_zpool_data(zpool_data)[:log].should == ["log_disk"]
+        expect(provider.process_zpool_data(zpool_data)[:log]).to eq(["log_disk"])
       end
     end
 
     describe "when there are two logs" do
       it "should add the log disks to the hash as a single string" do
         zpool_data.concat ["spares", "spare_disk", "spare_disk2"]
-        provider.process_zpool_data(zpool_data)[:spare].should == ["spare_disk spare_disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:spare]).to eq(["spare_disk spare_disk2"])
       end
     end
 
     describe "when the vdev is a single mirror" do
       it "should call create_multi_array with mirror" do
         zpool_data = ["mirrorpool", "mirror", "disk1", "disk2"]
-        provider.process_zpool_data(zpool_data)[:mirror].should == ["disk1 disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:mirror]).to eq(["disk1 disk2"])
       end
     end
 
     describe "when the vdev is a single mirror on solaris 10u9 or later" do
       it "should call create_multi_array with mirror" do
         zpool_data = ["mirrorpool", "mirror-0", "disk1", "disk2"]
-        provider.process_zpool_data(zpool_data)[:mirror].should == ["disk1 disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:mirror]).to eq(["disk1 disk2"])
       end
     end
 
     describe "when the vdev is a double mirror" do
       it "should call create_multi_array with mirror" do
         zpool_data = ["mirrorpool", "mirror", "disk1", "disk2", "mirror", "disk3", "disk4"]
-        provider.process_zpool_data(zpool_data)[:mirror].should == ["disk1 disk2", "disk3 disk4"]
+        expect(provider.process_zpool_data(zpool_data)[:mirror]).to eq(["disk1 disk2", "disk3 disk4"])
       end
     end
 
     describe "when the vdev is a double mirror on solaris 10u9 or later" do
       it "should call create_multi_array with mirror" do
         zpool_data = ["mirrorpool", "mirror-0", "disk1", "disk2", "mirror-1", "disk3", "disk4"]
-        provider.process_zpool_data(zpool_data)[:mirror].should == ["disk1 disk2", "disk3 disk4"]
+        expect(provider.process_zpool_data(zpool_data)[:mirror]).to eq(["disk1 disk2", "disk3 disk4"])
       end
     end
 
     describe "when the vdev is a raidz1" do
       it "should call create_multi_array with raidz1" do
         zpool_data = ["mirrorpool", "raidz1", "disk1", "disk2"]
-        provider.process_zpool_data(zpool_data)[:raidz].should == ["disk1 disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:raidz]).to eq(["disk1 disk2"])
       end
     end
 
     describe "when the vdev is a raidz1 on solaris 10u9 or later" do
       it "should call create_multi_array with raidz1" do
         zpool_data = ["mirrorpool", "raidz1-0", "disk1", "disk2"]
-        provider.process_zpool_data(zpool_data)[:raidz].should == ["disk1 disk2"]
+        expect(provider.process_zpool_data(zpool_data)[:raidz]).to eq(["disk1 disk2"])
       end
     end
 
@@ -132,8 +132,8 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
       it "should call create_multi_array with raidz2 and set the raid_parity" do
         zpool_data = ["mirrorpool", "raidz2", "disk1", "disk2"]
         pool = provider.process_zpool_data(zpool_data)
-        pool[:raidz].should == ["disk1 disk2"]
-        pool[:raid_parity].should == "raidz2"
+        expect(pool[:raidz]).to eq(["disk1 disk2"])
+        expect(pool[:raid_parity]).to eq("raidz2")
       end
     end
 
@@ -141,8 +141,8 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
       it "should call create_multi_array with raidz2 and set the raid_parity" do
         zpool_data = ["mirrorpool", "raidz2-0", "disk1", "disk2"]
         pool = provider.process_zpool_data(zpool_data)
-        pool[:raidz].should == ["disk1 disk2"]
-        pool[:raid_parity].should == "raidz2"
+        expect(pool[:raidz]).to eq(["disk1 disk2"])
+        expect(pool[:raid_parity]).to eq("raidz2")
       end
     end
   end
@@ -155,7 +155,7 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
           pool_hash[field] = 'value'
           provider.stubs(:current_pool).returns(pool_hash)
 
-          provider.send(field).should == 'value'
+          expect(provider.send(field)).to eq('value')
         end
       end
 
@@ -171,20 +171,57 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
   end
 
   context '#create' do
-    before do
-      resource[:disk] = "disk1"
+    context "when creating disks for a zpool" do
+      before do
+        resource[:disk] = "disk1"
+      end
+
+      it "should call create with the build_vdevs value" do
+        provider.expects(:zpool).with(:create, name, 'disk1')
+        provider.create
+      end
+
+      it "should call create with the 'spares' and 'log' values" do
+        resource[:spare] = ['value1']
+        resource[:log] = ['value2']
+        provider.expects(:zpool).with(:create, name, 'disk1', 'spare', 'value1', 'log', 'value2')
+        provider.create
+      end
     end
 
-    it "should call create with the build_vdevs value" do
-      provider.expects(:zpool).with(:create, name, 'disk1')
-      provider.create
+    context "when creating mirrors for a zpool" do
+      it "executes 'create' for a single group of mirrored devices" do
+        resource[:mirror] = ["disk1 disk2"]
+        provider.expects(:zpool).with(:create, name, 'mirror', 'disk1', 'disk2')
+        provider.create
+      end
+
+      it "repeats the 'mirror' keyword between groups of mirrored devices" do
+        resource[:mirror] = ["disk1 disk2", "disk3 disk4"]
+        provider.expects(:zpool).with(:create, name, 'mirror', 'disk1', 'disk2', 'mirror', 'disk3', 'disk4')
+        provider.create
+      end
     end
 
-    it "should call create with the 'spares' and 'log' values" do
-      resource[:spare] = ['value1']
-      resource[:log] = ['value2']
-      provider.expects(:zpool).with(:create, name, 'disk1', 'spare', 'value1', 'log', 'value2')
-      provider.create
+    describe "when creating raidz for a zpool" do
+      it "executes 'create' for a single raidz group" do
+        resource[:raidz] = ["disk1 disk2"]
+        provider.expects(:zpool).with(:create, name, 'raidz1', 'disk1', 'disk2')
+        provider.create
+      end
+
+      it "execute 'create' for a single raidz2 group" do
+        resource[:raidz] = ["disk1 disk2"]
+        resource[:raid_parity] = 'raidz2'
+        provider.expects(:zpool).with(:create, name, 'raidz2', 'disk1', 'disk2')
+        provider.create
+      end
+
+      it "repeats the 'raidz1' keyword between each group of raidz devices" do
+        resource[:raidz] = ["disk1 disk2", "disk3 disk4"]
+        provider.expects(:zpool).with(:create, name, 'raidz1', 'disk1', 'disk2', 'raidz1', 'disk3', 'disk4')
+        provider.create
+      end
     end
   end
 
@@ -203,12 +240,12 @@ describe Puppet::Type.type(:zpool).provider(:zpool) do
 
     it "should return false if the current_pool is absent" do
       provider.expects(:current_pool).returns({:pool => :absent})
-      provider.should_not be_exists
+      expect(provider).not_to be_exists
     end
 
     it "should return true if the current_pool has values" do
       provider.expects(:current_pool).returns({:pool => name})
-      provider.should be_exists
+      expect(provider).to be_exists
     end
   end
 end

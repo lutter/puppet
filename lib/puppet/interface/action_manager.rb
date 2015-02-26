@@ -29,18 +29,6 @@ module Puppet::Interface::ActionManager
     @actions[action.name] = action
   end
 
-  # Defines an action without using ActionBuilder. The block given is
-  # the code that will be executed when the action is invoked.
-  # @api public
-  # @deprecated
-  def script(name, &block)
-    @actions ||= {}
-    Puppet.warning "Redefining action #{name} for #{self}" if action?(name)
-
-    # REVISIT: (#18048) it's possible to create multiple default actions
-    @actions[name] = Puppet::Interface::Action.new(self, name, :when_invoked => block)
-  end
-
   # Returns the list of available actions for this face.
   # @return [Array<Symbol>] The names of the actions for this face
   # @api private
@@ -56,7 +44,7 @@ module Puppet::Interface::ActionManager
     # We need to uniq the result, because we duplicate actions when they are
     # fetched to ensure that they have the correct bindings; they shadow the
     # parent, and uniq implements that. --daniel 2011-06-01
-    result.uniq.sort
+    (result - @deactivated_actions.to_a).uniq.sort
   end
 
   # Retrieves a named action
@@ -92,6 +80,14 @@ module Puppet::Interface::ActionManager
       raise "The actions #{default.map(&:name).join(", ")} cannot all be default"
     end
     default.first
+  end
+
+  # Deactivate a named action
+  # @return [Puppet::Interface::Action]
+  # @api public
+  def deactivate_action(name)
+    @deactivated_actions ||= Set.new
+    @deactivated_actions.add name.to_sym
   end
 
   # @api private

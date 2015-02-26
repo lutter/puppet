@@ -2,15 +2,12 @@ module Puppet::Network::HTTP
 end
 
 require 'puppet/network/http'
-require 'puppet/network/http/api/v1'
-require 'puppet/network/authentication'
 require 'puppet/network/rights'
 require 'puppet/util/profiler'
 require 'puppet/util/profiler/aggregate'
 require 'resolv'
 
 module Puppet::Network::HTTP::Handler
-  include Puppet::Network::Authentication
   include Puppet::Network::HTTP::Issues
 
   # These shouldn't be allowed to be set by clients
@@ -59,7 +56,7 @@ module Puppet::Network::HTTP::Handler
     profiler = configure_profiler(request_headers, request_params)
 
     Puppet::Util::Profiler.profile("Processed request #{request_method} #{request_path}", [:http, request_method, request_path]) do
-      if route = @routes.find { |route| route.matches?(new_request) }
+      if route = @routes.find { |r| r.matches?(new_request) }
         route.process(new_request, new_response)
       else
         raise Puppet::Network::HTTP::Error::HTTPNotFoundError.new("No route for #{new_request.method} #{new_request.path}", HANDLER_NOT_FOUND)
@@ -69,7 +66,7 @@ module Puppet::Network::HTTP::Handler
   rescue Puppet::Network::HTTP::Error::HTTPError => e
     Puppet.info(e.message)
     new_response.respond_with(e.status, "application/json", e.to_json)
-  rescue Exception => e
+  rescue StandardError => e
     http_e = Puppet::Network::HTTP::Error::HTTPServerError.new(e)
     Puppet.err(http_e.message)
     new_response.respond_with(http_e.status, "application/json", http_e.to_json)
@@ -146,12 +143,7 @@ module Puppet::Network::HTTP::Handler
   end
 
   def parse_parameter_value(param, value)
-    case value
-    when /^---/
-      Puppet.debug("Found YAML while processing request parameter #{param} (value: <#{value}>)")
-      Puppet.deprecation_warning("YAML in network requests is deprecated and will be removed in a future version. See http://links.puppetlabs.com/deprecate_yaml_on_network")
-      YAML.load(value, :safe => true, :deserialize_symbols => true)
-    when Array
+    if value.is_a?(Array)
       value.collect { |v| parse_primitive_parameter_value(v) }
     else
       parse_primitive_parameter_value(value)

@@ -9,7 +9,6 @@ require 'timeout'
 describe Puppet::Application do
 
   before(:each) do
-    Puppet::Util::Instrumentation.stubs(:init)
     @app = Class.new(Puppet::Application).new
     @appclass = @app.class
 
@@ -26,8 +25,8 @@ describe Puppet::Application do
       args[0] = 'different_subcommand'
       args[1] = '--other-arg'
 
-      app.command_line.subcommand_name.should == 'subcommand'
-      app.command_line.args.should == ['--arg']
+      expect(app.command_line.subcommand_name).to eq('subcommand')
+      expect(app.command_line.args).to eq(['--arg'])
     end
   end
 
@@ -37,7 +36,7 @@ describe Puppet::Application do
       Puppet.expects(:err).with(regexp_matches(/missing required app default setting/))
       expect {
         @app.run
-      }.to exit_with 1
+      }.to exit_with(1)
     end
   end
 
@@ -48,7 +47,7 @@ describe Puppet::Application do
     end
 
     it "should find classes in the namespace" do
-      @klass.find("Agent").should == @klass::Agent
+      expect(@klass.find("Agent")).to eq(@klass::Agent)
     end
 
     it "should not find classes outside the namespace" do
@@ -69,8 +68,8 @@ describe Puppet::Application do
 
     it "#12114: should prevent File namespace collisions" do
       # have to require the file face once, then the second time around it would fail
-      @klass.find("File").should == Puppet::Application::File
-      @klass.find("File").should == Puppet::Application::File
+      expect(@klass.find("File")).to eq(Puppet::Application::File)
+      expect(@klass.find("File")).to eq(Puppet::Application::File)
     end
   end
 
@@ -79,30 +78,30 @@ describe Puppet::Application do
       apps =  %w{describe filebucket kick queue resource agent cert apply doc master}
       Puppet::Util::Autoload.expects(:files_to_load).returns(apps)
 
-      Puppet::Application.available_application_names.should =~ apps
+      expect(Puppet::Application.available_application_names).to match_array(apps)
     end
 
     it 'should find applications from multiple paths' do
       Puppet::Util::Autoload.expects(:files_to_load).with('puppet/application').returns(%w{ /a/foo.rb /b/bar.rb })
 
-      Puppet::Application.available_application_names.should =~ %w{ foo bar }
+      expect(Puppet::Application.available_application_names).to match_array(%w{ foo bar })
     end
 
     it 'should return unique application names' do
       Puppet::Util::Autoload.expects(:files_to_load).with('puppet/application').returns(%w{ /a/foo.rb /b/foo.rb })
 
-      Puppet::Application.available_application_names.should == %w{ foo }
+      expect(Puppet::Application.available_application_names).to eq(%w{ foo })
     end
   end
 
   describe ".run_mode" do
     it "should default to user" do
-      @appclass.run_mode.name.should == :user
+      expect(@appclass.run_mode.name).to eq(:user)
     end
 
     it "should set and get a value" do
       @appclass.run_mode :agent
-      @appclass.run_mode.name.should == :agent
+      expect(@appclass.run_mode.name).to eq(:agent)
     end
   end
 
@@ -127,16 +126,16 @@ describe Puppet::Application do
       app = TestApp.new
       app.initialize_app_defaults
 
-      Puppet.run_mode.should be_master
+      expect(Puppet.run_mode).to be_master
     end
 
     it "should sadly and frighteningly allow run_mode to change at runtime via #run" do
       app = TestApp.new
       app.run
 
-      app.class.run_mode.name.should == :master
+      expect(app.class.run_mode.name).to eq(:master)
 
-      Puppet.run_mode.should be_master
+      expect(Puppet.run_mode).to be_master
     end
   end
 
@@ -152,44 +151,28 @@ describe Puppet::Application do
   end
 
   it "should have a run entry-point" do
-    @app.should respond_to(:run)
+    expect(@app).to respond_to(:run)
   end
 
   it "should have a read accessor to options" do
-    @app.should respond_to(:options)
+    expect(@app).to respond_to(:options)
   end
 
   it "should include a default setup method" do
-    @app.should respond_to(:setup)
+    expect(@app).to respond_to(:setup)
   end
 
   it "should include a default preinit method" do
-    @app.should respond_to(:preinit)
+    expect(@app).to respond_to(:preinit)
   end
 
   it "should include a default run_command method" do
-    @app.should respond_to(:run_command)
+    expect(@app).to respond_to(:run_command)
   end
 
   it "should invoke main as the default" do
     @app.expects( :main )
     @app.run_command
-  end
-
-  it "should initialize the Puppet Instrumentation layer early in the life cycle" do
-    # Not proud of this, but the fact that we are stubbing init_app_defaults
-    #  below means that we will get errors if anyone tries to access any
-    #  settings that depend on app_defaults.  In general this whole test
-    #  seems to be testing too many implementation details rather than
-    #  functionality, but, hey.
-    Puppet[:route_file] = "/dev/null"
-
-    startup_sequence = sequence('startup')
-    @app.expects(:initialize_app_defaults).in_sequence(startup_sequence)
-    Puppet::Util::Instrumentation.expects(:init).in_sequence(startup_sequence)
-    @app.expects(:preinit).in_sequence(startup_sequence)
-
-    expect { @app.run }.to exit_with(1)
   end
 
   describe 'when invoking clear!' do
@@ -199,23 +182,23 @@ describe Puppet::Application do
     end
 
     it 'should have nil run_status' do
-      Puppet::Application.run_status.should be_nil
+      expect(Puppet::Application.run_status).to be_nil
     end
 
     it 'should return false for restart_requested?' do
-      Puppet::Application.restart_requested?.should be_false
+      expect(Puppet::Application.restart_requested?).to be_falsey
     end
 
     it 'should return false for stop_requested?' do
-      Puppet::Application.stop_requested?.should be_false
+      expect(Puppet::Application.stop_requested?).to be_falsey
     end
 
     it 'should return false for interrupted?' do
-      Puppet::Application.interrupted?.should be_false
+      expect(Puppet::Application.interrupted?).to be_falsey
     end
 
     it 'should return true for clear?' do
-      Puppet::Application.clear?.should be_true
+      expect(Puppet::Application.clear?).to be_truthy
     end
   end
 
@@ -230,23 +213,23 @@ describe Puppet::Application do
     end
 
     it 'should have run_status of :stop_requested' do
-      Puppet::Application.run_status.should == :stop_requested
+      expect(Puppet::Application.run_status).to eq(:stop_requested)
     end
 
     it 'should return true for stop_requested?' do
-      Puppet::Application.stop_requested?.should be_true
+      expect(Puppet::Application.stop_requested?).to be_truthy
     end
 
     it 'should return false for restart_requested?' do
-      Puppet::Application.restart_requested?.should be_false
+      expect(Puppet::Application.restart_requested?).to be_falsey
     end
 
     it 'should return true for interrupted?' do
-      Puppet::Application.interrupted?.should be_true
+      expect(Puppet::Application.interrupted?).to be_truthy
     end
 
     it 'should return false for clear?' do
-      Puppet::Application.clear?.should be_false
+      expect(Puppet::Application.clear?).to be_falsey
     end
   end
 
@@ -261,23 +244,23 @@ describe Puppet::Application do
     end
 
     it 'should have run_status of :restart_requested' do
-      Puppet::Application.run_status.should == :restart_requested
+      expect(Puppet::Application.run_status).to eq(:restart_requested)
     end
 
     it 'should return true for restart_requested?' do
-      Puppet::Application.restart_requested?.should be_true
+      expect(Puppet::Application.restart_requested?).to be_truthy
     end
 
     it 'should return false for stop_requested?' do
-      Puppet::Application.stop_requested?.should be_false
+      expect(Puppet::Application.stop_requested?).to be_falsey
     end
 
     it 'should return true for interrupted?' do
-      Puppet::Application.interrupted?.should be_true
+      expect(Puppet::Application.interrupted?).to be_truthy
     end
 
     it 'should return false for clear?' do
-      Puppet::Application.clear?.should be_false
+      expect(Puppet::Application.clear?).to be_falsey
     end
   end
 
@@ -371,7 +354,7 @@ describe Puppet::Application do
 
     describe "when using --version" do
       it "should declare a version option" do
-        @app.should respond_to(:handle_version)
+        expect(@app).to respond_to(:handle_version)
       end
 
       it "should exit after printing the version" do
@@ -413,7 +396,7 @@ describe Puppet::Application do
         @app.options.stubs(:[]).with(level).returns(true)
         Puppet::Util::Log.stubs(:newdestination)
         @app.setup
-        Puppet::Util::Log.level.should == (level == :verbose ? :info : :debug)
+        expect(Puppet::Util::Log.level).to eq(level == :verbose ? :info : :debug)
       end
     end
 
@@ -425,6 +408,19 @@ describe Puppet::Application do
       @app.setup
     end
 
+    it "does not downgrade the loglevel when --verbose is specified" do
+      Puppet[:log_level] = :debug
+      @app.options.stubs(:[]).with(:verbose).returns(true)
+      @app.setup_logs
+
+      expect(Puppet::Util::Log.level).to eq(:debug)
+    end
+
+    it "allows the loglevel to be specified as an argument" do
+      @app.set_log_level(:debug => true)
+
+      expect(Puppet::Util::Log.level).to eq(:debug)
+    end
   end
 
   describe "when configuring routes" do
@@ -455,7 +451,7 @@ describe Puppet::Application do
 
       @app.configure_indirector_routes
 
-      Puppet::Node.indirection.terminus_class.should == 'exec'
+      expect(Puppet::Node.indirection.terminus_class).to eq('exec')
     end
 
     it "should not fail if the route file doesn't exist" do
@@ -545,21 +541,21 @@ describe Puppet::Application do
         @app.class.option("--test1","-t") do
         end
 
-        @app.should respond_to(:handle_test1)
+        expect(@app).to respond_to(:handle_test1)
       end
 
       it "should transpose in option name any '-' into '_'" do
         @app.class.option("--test-dashes-again","-t") do
         end
 
-        @app.should respond_to(:handle_test_dashes_again)
+        expect(@app).to respond_to(:handle_test_dashes_again)
       end
 
       it "should create a new method called handle_test2 with option(\"--[no-]test2\")" do
         @app.class.option("--[no-]test2","-t") do
         end
 
-        @app.should respond_to(:handle_test2)
+        expect(@app).to respond_to(:handle_test2)
       end
 
       describe "when a block is passed" do
@@ -638,7 +634,7 @@ describe Puppet::Application do
     it "should set the flag that a destination is set in the options hash" do
       Puppet::Util::Log.stubs(:newdestination).with(test_arg)
       @app.handle_logdest_arg(test_arg)
-      @app.options[:setdest].should be_true
+      expect(@app.options[:setdest]).to be_truthy
     end
   end
 

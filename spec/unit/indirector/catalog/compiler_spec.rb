@@ -2,11 +2,9 @@
 require 'spec_helper'
 
 require 'puppet/indirector/catalog/compiler'
-require 'puppet/rails'
 
 describe Puppet::Resource::Catalog::Compiler do
   before do
-    Puppet::Rails.stubs(:init)
     Facter.stubs(:to_hash).returns({})
   end
 
@@ -79,12 +77,12 @@ describe Puppet::Resource::Catalog::Compiler do
 
     it "should fail if no node is passed and none can be found" do
       Puppet::Node.indirection.stubs(:find).with(@name, anything).returns(nil)
-      proc { @compiler.find(@request) }.should raise_error(ArgumentError)
+      expect { @compiler.find(@request) }.to raise_error(ArgumentError)
     end
 
     it "should fail intelligently when searching for a node raises an exception" do
       Puppet::Node.indirection.stubs(:find).with(@name, anything).raises "eh"
-      proc { @compiler.find(@request) }.should raise_error(Puppet::Error)
+      expect { @compiler.find(@request) }.to raise_error(Puppet::Error)
     end
 
     it "should pass the found node to the compiler for compiling" do
@@ -125,7 +123,7 @@ describe Puppet::Resource::Catalog::Compiler do
       result = mock 'result'
 
       Puppet::Parser::Compiler.expects(:compile).returns result
-      @compiler.find(@request).should equal(result)
+      expect(@compiler.find(@request)).to equal(result)
     end
   end
 
@@ -149,18 +147,15 @@ describe Puppet::Resource::Catalog::Compiler do
       request = Puppet::Indirector::Request.new(:catalog, :find, "hostname", nil)
       request.options[:facts] = nil
 
-      @compiler.extract_facts_from_request(request).should be_nil
+      expect(@compiler.extract_facts_from_request(request)).to be_nil
     end
 
-    it "deserializes the facts and timestamps them" do
-      @facts.timestamp = Time.parse('2010-11-01')
+    it "should deserialize the facts without changing the timestamp" do
+      time = Time.now
+      @facts.timestamp = time
       request = a_request_that_contains(@facts)
-      now = Time.parse('2010-11-02')
-      Time.stubs(:now).returns(now)
-
       facts = @compiler.extract_facts_from_request(request)
-
-      facts.timestamp.should == now
+      expect(facts.timestamp).to eq(time)
     end
 
     it "should convert the facts into a fact instance and save it" do
@@ -258,14 +253,14 @@ describe Puppet::Resource::Catalog::Compiler do
     it "should return the same catalog if it doesn't support filtering" do
       @catalog.stubs(:respond_to?).with(:filter).returns(false)
 
-      @compiler.filter(@catalog).should == @catalog
+      expect(@compiler.filter(@catalog)).to eq(@catalog)
     end
 
     it "should return the filtered catalog" do
       catalog = stub 'filtered catalog'
       @catalog.stubs(:filter).returns(catalog)
 
-      @compiler.filter(@catalog).should == catalog
+      expect(@compiler.filter(@catalog)).to eq(catalog)
     end
 
   end

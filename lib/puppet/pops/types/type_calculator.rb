@@ -99,7 +99,6 @@
 class Puppet::Pops::Types::TypeCalculator
 
   Types = Puppet::Pops::Types
-  TheInfinity = 1.0 / 0.0 # because the Infinity symbol is not defined
 
   # @api public
   def self.assignable?(t1, t2)
@@ -272,7 +271,12 @@ class Puppet::Pops::Types::TypeCalculator
     # Unit can be assigned to anything
     return true if t2.class == Types::PUnitType
 
-    @@assignable_visitor.visit_this_1(self, t, t2)
+    if t2.class == Types::PVariantType
+      # Assignable if all contained types are assignable
+      t2.types.all? { |vt| @@assignable_visitor.visit_this_1(self, t, vt) }
+    else
+      @@assignable_visitor.visit_this_1(self, t, t2)
+    end
  end
 
   # Returns an enumerable if the t represents something that can be iterated
@@ -411,9 +415,26 @@ class Puppet::Pops::Types::TypeCalculator
     return false unless o.is_a?(Array)
     return false unless o.all? {|element| instance_of(t.element_type, element) }
     size_t = t.size_type || @collection_default_size_t
-    size_t2 = size_as_type(o)
     # optimize by calling directly
-    assignable_PIntegerType(size_t, size_t2)
+    return instance_of_PIntegerType(size_t, o.size)
+  end
+
+  # @api private
+  def instance_of_PIntegerType(t, o)
+    return false unless o.is_a?(Integer)
+    x = t.from
+    x = -Float::INFINITY if x.nil? || x == :default
+    y = t.to
+    y = Float::INFINITY if y.nil? || y == :default
+    return x < y ? x <= o && y >= o : y <= o && x >= o
+  end
+
+  # @api private
+  def instance_of_PStringType(t, o)
+    return false unless o.is_a?(String)
+    # true if size compliant
+    size_t = t.size_type || @collection_default_size_t
+    instance_of_PIntegerType(size_t, o.size)
   end
 
   def instance_of_PTupleType(t, o)
@@ -421,9 +442,7 @@ class Puppet::Pops::Types::TypeCalculator
     # compute the tuple's min/max size, and check if that size matches
     size_t = t.size_type || Puppet::Pops::Types::TypeFactory.range(*t.size_range)
 
-    # compute the array's size as type
-    size_t2 = size_as_type(o)
-    return false unless assignable?(size_t, size_t2)
+    return false unless instance_of_PIntegerType(size_t, o.size)
     o.each_with_index do |element, index|
        return false unless instance_of(t.types[index] || t.types[-1], element)
     end
@@ -443,9 +462,8 @@ class Puppet::Pops::Types::TypeCalculator
     element_t = t.element_type
     return false unless o.keys.all? {|key| instance_of(key_t, key) } && o.values.all? {|value| instance_of(element_t, value) }
     size_t = t.size_type || @collection_default_size_t
-    size_t2 = size_as_type(o)
     # optimize by calling directly
-    assignable_PIntegerType(size_t, size_t2)
+    return instance_of_PIntegerType(size_t, o.size)
   end
 
   def instance_of_PDataType(t, o)
@@ -453,12 +471,11 @@ class Puppet::Pops::Types::TypeCalculator
   end
 
   def instance_of_PNilType(t, o)
-    return o.nil?
+    o.nil? || o == :undef
   end
 
   def instance_of_POptionalType(t, o)
-    return true if (o.nil?)
-    instance_of(t.optional_type, o)
+    instance_of_PNilType(t, o) || instance_of(t.optional_type, o)
   end
 
   def instance_of_PVariantType(t, o)
@@ -561,8 +578,8 @@ class Puppet::Pops::Types::TypeCalculator
       t = Types::PIntegerType.new()
       from = [t1range[0], t2range[0]].min
       to = [t1range[1], t2range[1]].max
-      t.from = from unless from == TheInfinity
-      t.to = to unless to == TheInfinity
+      t.from = from unless from == Float::INFINITY
+      t.to = to unless to == Float::INFINITY
       return t
     end
 
@@ -573,8 +590,8 @@ class Puppet::Pops::Types::TypeCalculator
       t = Types::PFloatType.new()
       from = [t1range[0], t2range[0]].min
       to = [t1range[1], t2range[1]].max
-      t.from = from unless from == TheInfinity
-      t.to = to unless to == TheInfinity
+      t.from = from unless from == Float::INFINITY
+      t.to = to unless to == Float::INFINITY
       return t
     end
 
@@ -786,7 +803,6 @@ class Puppet::Pops::Types::TypeCalculator
     case o
     when :default
       Types::PDefaultType.new()
-
     else
       infer_Object(o)
     end
@@ -872,19 +888,33 @@ class Puppet::Pops::Types::TypeCalculator
   end
 
   def infer_set_Hash(o)
-    type = Types::PHashType.new()
     if o.empty?
-      ktype = Types::PNilType.new()
-      vtype = Types::PNilType.new()
+      type = Types::PHashType.new
+      type.key_type = Types::PNilType.new
+      type.element_type = Types::PNilType.new
+      type.size_type = size_as_type(o)
     else
-      ktype = Types::PVariantType.new()
-      ktype.types = o.keys.map() {|k| infer_set(k) }
-      etype = Types::PVariantType.new()
-      etype.types = o.values.map() {|e| infer_set(e) }
+      if o.keys.find {|k| !instance_of_PStringType(@non_empty_string_t, k) }
+        type = Types::PHashType.new
+        ktype = Types::PVariantType.new
+        ktype.types = o.keys.map {|k| infer_set(k) }
+        etype = Types::PVariantType.new
+        etype.types = o.values.map {|e| infer_set(e) }
+        type.key_type = unwrap_single_variant(ktype)
+        type.element_type = unwrap_single_variant(etype)
+        type.size_type = size_as_type(o)
+      else
+        elements = []
+        o.each_pair do |k,v|
+          element = Types::PStructElement.new
+          element.name = k
+          element.type = infer_set(v)
+          elements << element
+        end
+        type = Types::PStructType.new
+        type.elements = elements
+      end
     end
-    type.key_type = unwrap_single_variant(ktype)
-    type.element_type = unwrap_single_variant(etype)
-    type.size_type = size_as_type(o)
     type
   end
 
@@ -954,7 +984,7 @@ class Puppet::Pops::Types::TypeCalculator
     from = range.from
     to = range.to
     x = from.nil? ? 1 : from
-    y = to.nil? ? TheInfinity : to
+    y = to.nil? ? Float::INFINITY : to
     if x < y
       [x, y]
     else
@@ -964,8 +994,8 @@ class Puppet::Pops::Types::TypeCalculator
 
   # @api private
   def from_to_ordered(from, to)
-    x = (from.nil? || from == :default) ? -TheInfinity : from
-    y = (to.nil? || to == :default) ? TheInfinity : to
+    x = (from.nil? || from == :default) ? -Float::INFINITY : from
+    y = (to.nil? || to == :default) ? Float::INFINITY : to
     if x < y
       [x, y]
     else
@@ -1151,15 +1181,20 @@ class Puppet::Pops::Types::TypeCalculator
 
   # @api private
   def assignable_PEnumType(t, t2)
-    return true if t == t2 || (t.values.empty? && (t2.is_a?(Types::PStringType) || t2.is_a?(Types::PEnumType)))
+    return true if t == t2
+    if t.values.empty?
+      return true if t2.is_a?(Types::PStringType) || t2.is_a?(Types::PEnumType) || t2.is_a?(Types::PPatternType)
+    end
     case t2
     when Types::PStringType
       # if the set of strings are all found in the set of enums
-      t2.values.all? { |s| t.values.any? { |e| e == s }}
+      !t2.values.empty?() && t2.values.all? { |s| t.values.any? { |e| e == s }}
     when Types::PVariantType
       t2.types.all? {|variant_t| assignable_PEnumType(t, variant_t) }
     when Types::PEnumType
-      t2.values.all? { |s| t.values.any? {|e| e == s }}
+      # empty means any enum
+      return true if t.values.empty?
+      !t2.values.empty? && t2.values.all? { |s| t.values.any? {|e| e == s }}
     else
       false
     end
@@ -1184,7 +1219,7 @@ class Puppet::Pops::Types::TypeCalculator
         assignable_PIntegerType(size_t, @collection_default_size_t)
 
       when Types::PEnumType
-        if t2.values
+        if t2.values && !t2.values.empty?
           # true if all enum values are within range
           min, max = t2.values.map(&:size).minmax
           trange =  from_to_ordered(size_t.from, size_t.to)
@@ -1192,8 +1227,9 @@ class Puppet::Pops::Types::TypeCalculator
           # If t2 min and max are within the range of t
           trange[0] <= t2range[0] && trange[1] >= t2range[1]
         else
-          # no string can match this enum anyway since it does not accept anything
-          false
+          # enum represents all enums, and thus all strings, a sized constrained string can thus not
+          # be assigned any enum (unless it is max size).
+          assignable_PIntegerType(size_t, @collection_default_size_t)
         end
       else
         # no other type matches string
@@ -1217,6 +1253,8 @@ class Puppet::Pops::Types::TypeCalculator
       values = t2.values
     when Types::PVariantType
       return t2.types.all? {|variant_t| assignable_PPatternType(t, variant_t) }
+    when Types::PPatternType
+      return t.patterns.empty? ? true : false
     else
       return false
     end
@@ -1226,9 +1264,10 @@ class Puppet::Pops::Types::TypeCalculator
       # (There should really always be a pattern, but better safe than sorry).
       return t.patterns.empty? ? true : false
     end
-    # all strings in String/Enum type must match one of the patterns in Pattern type
+    # all strings in String/Enum type must match one of the patterns in Pattern type,
+    # or Pattern represents all Patterns == all Strings
     regexps = t.patterns.map {|p| p.regexp }
-    t2.values.all? { |v| regexps.any? {|re| re.match(v) } }
+    regexps.empty? || t2.values.all? { |v| regexps.any? {|re| re.match(v) } }
   end
 
   # @api private
@@ -1301,7 +1340,6 @@ class Puppet::Pops::Types::TypeCalculator
   end
 
   # Array is assignable if t2 is an Array and t2's element type is assignable, or if t2 is a Tuple
-  # where 
   # @api private
   def assignable_PArrayType(t, t2)
     if t2.is_a?(Types::PArrayType)
@@ -1355,10 +1393,10 @@ class Puppet::Pops::Types::TypeCalculator
       size_t = t.size_type || @collection_default_size_t
       min, max = size_t.range
       struct_size = t2.elements.size
+      key_type = t.key_type
       element_type = t.element_type
       ( struct_size >= min && struct_size <= max &&
-        assignable?(t.key_type, @non_empty_string_t)  &&
-        t2.hashed_elements.all? {|k,v| assignable?(element_type, v) })
+        t2.elements.all? {|e| instance_of(key_type, e.name) && assignable?(element_type, e.type) })
     else
       false
     end
@@ -1539,8 +1577,6 @@ class Puppet::Pops::Types::TypeCalculator
     # translate to string, and skip Unit types
     types = t.param_types.types.map {|t2| string(t2) unless t2.class == Types::PUnitType }.compact
 
-    params_part= types.join(', ')
-
     s = "Callable[" << types.join(', ')
     unless range.empty?
       (s << ', ') unless types.empty?
@@ -1646,7 +1682,7 @@ class Puppet::Pops::Types::TypeCalculator
   # @api private
   def enumerable_PIntegerType(t)
     # Not enumerable if representing an infinite range
-    return nil if t.size == TheInfinity
+    return nil if t.size == Float::INFINITY
     t
   end
 
@@ -1663,6 +1699,11 @@ class Puppet::Pops::Types::TypeCalculator
     else
       raise ArgumentError, "Internal Error: Only Array and Tuple can be given to copy_as_tuple"
     end
+  end
+
+  # Debugging to_s to reduce the amount of output
+  def to_s
+    '[a TypeCalculator]'
   end
 
   private

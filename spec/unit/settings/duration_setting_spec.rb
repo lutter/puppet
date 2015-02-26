@@ -9,14 +9,18 @@ describe Puppet::Settings::DurationSetting do
 
   describe "when munging the setting" do
     it "should return the same value if given an integer" do
-      subject.munge(5).should == 5
+      expect(subject.munge(5)).to eq(5)
+    end
+
+    it "should return the same value if given nil" do
+      expect(subject.munge(nil)).to be_nil
     end
 
     it "should return an integer if given a decimal string" do
-      subject.munge("12").should == 12
+      expect(subject.munge("12")).to eq(12)
     end
 
-    it "should fail if given anything but a well-formed string or integer" do
+    it "should fail if given anything but a well-formed string, integer, or nil" do
       [ '', 'foo', '2 d', '2d ', true, Time.now, 8.3, [] ].each do |value|
         expect { subject.munge(value) }.to raise_error(Puppet::Settings::ValidationError)
       end
@@ -33,13 +37,13 @@ describe Puppet::Settings::DurationSetting do
         '3s' => 3
       }.each do |value, converted_value|
         # subject.munge(value).should == converted_value
-        subject.munge(value).should == converted_value
+        expect(subject.munge(value)).to eq(converted_value)
       end
     end
 
     # This is to support the `filetimeout` setting
     it "should allow negative values" do
-      subject.munge(-1).should == -1
+      expect(subject.munge(-1)).to eq(-1)
     end
   end
 end

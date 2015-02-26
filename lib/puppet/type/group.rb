@@ -4,7 +4,7 @@ require 'puppet/property/keyvalue'
 require 'puppet/parameter/boolean'
 
 module Puppet
-  newtype(:group) do
+  Type.newtype(:group) do
     @doc = "Manage groups. On most platforms this can only create groups.
       Group membership must be managed on individual users.
 
@@ -107,9 +107,9 @@ module Puppet
       alias :should_to_s :is_to_s
     end
 
-    newparam(:auth_membership) do
+    newparam(:auth_membership, :boolean => true, :parent => Puppet::Parameter::Boolean) do
       desc "whether the provider is authoritative for group membership."
-      defaultto true
+      defaultto false
     end
 
     newparam(:name) do

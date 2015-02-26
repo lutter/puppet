@@ -16,6 +16,10 @@ describe Puppet::Transaction do
     catalog
   end
 
+  def touch_path
+    Puppet.features.microsoft_windows? ? "#{ENV['windir']}/system32" : "/usr/bin:/bin"
+  end
+
   def usr_bin_touch(path)
     Puppet.features.microsoft_windows? ? "#{ENV['windir']}/system32/cmd.exe /c \"type NUL >> \"#{path}\"\"" : "/usr/bin/touch #{path}"
   end
@@ -64,7 +68,7 @@ describe Puppet::Transaction do
     catalog.add_resource resource
 
     catalog.apply
-    Puppet::FileSystem.exist?(path).should be_true
+    expect(Puppet::FileSystem.exist?(path)).to be_truthy
   end
 
   it "should not apply virtual exported resources" do
@@ -92,7 +96,7 @@ describe Puppet::Transaction do
     transaction.expects(:apply).never.with(resource, nil)
 
     transaction.evaluate
-    transaction.resource_status(resource).should be_skipped
+    expect(transaction.resource_status(resource)).to be_skipped
   end
 
   it "should not apply host resources on device" do
@@ -106,7 +110,7 @@ describe Puppet::Transaction do
     transaction.expects(:apply).never.with(resource, nil)
 
     transaction.evaluate
-    transaction.resource_status(resource).should be_skipped
+    expect(transaction.resource_status(resource)).to be_skipped
   end
 
   it "should apply device resources on device" do
@@ -120,7 +124,7 @@ describe Puppet::Transaction do
     transaction.expects(:apply).with(resource, nil)
 
     transaction.evaluate
-    transaction.resource_status(resource).should_not be_skipped
+    expect(transaction.resource_status(resource)).not_to be_skipped
   end
 
   it "should apply resources appliable on host and device on a device" do
@@ -134,7 +138,7 @@ describe Puppet::Transaction do
     transaction.expects(:apply).with(resource, nil)
 
     transaction.evaluate
-    transaction.resource_status(resource).should_not be_skipped
+    expect(transaction.resource_status(resource)).not_to be_skipped
   end
 
   # Verify that one component requiring another causes the contained
@@ -189,8 +193,28 @@ describe Puppet::Transaction do
 
     catalog = mk_catalog(file, exec1, exec2)
     catalog.apply
-    Puppet::FileSystem.exist?(file1).should be_true
-    Puppet::FileSystem.exist?(file2).should be_true
+    expect(Puppet::FileSystem.exist?(file1)).to be_truthy
+    expect(Puppet::FileSystem.exist?(file2)).to be_truthy
+  end
+
+  it "does not refresh resources that have 'noop => true'" do
+    path = tmpfile("path")
+
+    notify = Puppet::Type.type(:notify).new(
+      :name    => "trigger",
+      :notify  => Puppet::Resource.new(:exec, "noop exec")
+    )
+
+    noop_exec = Puppet::Type.type(:exec).new(
+      :name    => "noop exec",
+      :path    => ENV["PATH"],
+      :command => touch(path),
+      :noop    => true
+    )
+
+    catalog = mk_catalog(notify, noop_exec)
+    catalog.apply
+    expect(Puppet::FileSystem.exist?(path)).to be_falsey
   end
 
   it "should apply no resources whatsoever if a pre_run_check fails" do
@@ -206,7 +230,7 @@ describe Puppet::Transaction do
 
     catalog = mk_catalog(file, notify)
     catalog.apply
-    Puppet::FileSystem.exist?(path).should_not be_true
+    expect(Puppet::FileSystem.exist?(path)).not_to be_truthy
   end
 
   it "should not let one failed refresh result in other refreshes failing" do
@@ -239,59 +263,71 @@ describe Puppet::Transaction do
 
     catalog = mk_catalog(file, exec1, exec2)
     catalog.apply
-    Puppet::FileSystem.exist?(newfile).should be_true
+    expect(Puppet::FileSystem.exist?(newfile)).to be_truthy
   end
 
-  it "should still trigger skipped resources" do
-    catalog = mk_catalog
-    catalog.add_resource(*Puppet::Type.type(:schedule).mkdefaultschedules)
+  describe "skipping resources" do
+    let(:fname) { tmpfile("exec") }
 
-    Puppet[:ignoreschedules] = false
+    let(:file) do
+      Puppet::Type.type(:file).new(
+        :name => tmpfile("file"),
+        :ensure => "file",
+        :backup => false
+      )
+    end
 
-    file = Puppet::Type.type(:file).new(
-      :name => tmpfile("file"),
-      :ensure => "file",
-      :backup => false
-    )
+    let(:exec) do
+      Puppet::Type.type(:exec).new(
+        :name => touch(fname),
+        :path => touch_path,
+        :subscribe => Puppet::Resource.new("file", file.name)
+      )
+    end
 
-    fname = tmpfile("exec")
+    it "does not trigger unscheduled resources" do
+      catalog = mk_catalog
+      catalog.add_resource(*Puppet::Type.type(:schedule).mkdefaultschedules)
 
-    exec = Puppet::Type.type(:exec).new(
-      :name => touch(fname),
-      :path => Puppet.features.microsoft_windows? ? "#{ENV['windir']}/system32" : "/usr/bin:/bin",
-      :schedule => "monthly",
-      :subscribe => Puppet::Resource.new("file", file.name)
-    )
+      Puppet[:ignoreschedules] = false
 
-    catalog.add_resource(file, exec)
+      exec[:schedule] = "monthly"
 
-    # Run it once
-    catalog.apply
-    Puppet::FileSystem.exist?(fname).should be_true
+      catalog.add_resource(file, exec)
 
-    # Now remove it, so it can get created again
-    Puppet::FileSystem.unlink(fname)
+      # Run it once so further runs don't schedule the resource
+      catalog.apply
+      expect(Puppet::FileSystem.exist?(fname)).to be_truthy
 
-    file[:content] = "some content"
+      # Now remove it, so it can get created again
+      Puppet::FileSystem.unlink(fname)
 
-    catalog.apply
-    Puppet::FileSystem.exist?(fname).should be_true
+      file[:content] = "some content"
 
-    # Now remove it, so it can get created again
-    Puppet::FileSystem.unlink(fname)
+      catalog.apply
+      expect(Puppet::FileSystem.exist?(fname)).to be_falsey
+    end
 
-    # And tag our exec
-    exec.tag("testrun")
+    it "does not trigger untagged resources" do
+      catalog = mk_catalog
 
-    # And our file, so it runs
-    file.tag("norun")
+      Puppet[:tags] = "runonly"
+      file.tag("runonly")
 
-    Puppet[:tags] = "norun"
+      catalog.add_resource(file, exec)
+      catalog.apply
+      expect(Puppet::FileSystem.exist?(fname)).to be_falsey
+    end
 
-    file[:content] = "totally different content"
+    it "does not trigger resources with failed dependencies" do
+      catalog = mk_catalog
+      file[:path] = make_absolute("/foo/bar/baz")
 
-    catalog.apply
-    Puppet::FileSystem.exist?(fname).should be_true
+      catalog.add_resource(file, exec)
+      catalog.apply
+
+      expect(Puppet::FileSystem.exist?(fname)).to be_falsey
+    end
   end
 
   it "should not attempt to evaluate resources with failed dependencies" do
@@ -318,8 +354,8 @@ describe Puppet::Transaction do
     catalog = mk_catalog(exec, file1, file2)
     catalog.apply
 
-    Puppet::FileSystem.exist?(file1[:path]).should be_false
-    Puppet::FileSystem.exist?(file2[:path]).should be_false
+    expect(Puppet::FileSystem.exist?(file1[:path])).to be_falsey
+    expect(Puppet::FileSystem.exist?(file2[:path])).to be_falsey
   end
 
   it "should not trigger subscribing resources on failure" do
@@ -344,8 +380,8 @@ describe Puppet::Transaction do
     catalog = mk_catalog(exec, create_file1, create_file2)
     catalog.apply
 
-    Puppet::FileSystem.exist?(file1).should be_false
-    Puppet::FileSystem.exist?(file2).should be_false
+    expect(Puppet::FileSystem.exist?(file1)).to be_falsey
+    expect(Puppet::FileSystem.exist?(file2)).to be_falsey
   end
 
   # #801 -- resources only checked in noop should be rescheduled immediately.
@@ -357,6 +393,6 @@ describe Puppet::Transaction do
 
     trans = catalog.apply
 
-    trans.resource_harness.should be_scheduled(resource)
+    expect(trans.resource_harness).to be_scheduled(resource)
   end
 end

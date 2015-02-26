@@ -1,5 +1,7 @@
 require 'spec_helper'
 
+require 'puppet/context/trusted_information'
+
 describe Puppet::Context::TrustedInformation do
   let(:key) do
     key = Puppet::SSL::Key.new("myname")
@@ -19,7 +21,12 @@ describe Puppet::Context::TrustedInformation do
   end
 
   let(:cert) do
-    Puppet::SSL::Certificate.from_instance(Puppet::SSL::CertificateFactory.build('ca', csr, csr.content, 1))
+    cert = Puppet::SSL::Certificate.from_instance(Puppet::SSL::CertificateFactory.build('ca', csr, csr.content, 1))
+
+    # The cert must be signed so that it can be successfully be DER-decoded later
+    signer = Puppet::SSL::CertificateSigner.new
+    signer.sign(cert.content, key.content)
+    cert
   end
 
   context "when remote" do
@@ -97,7 +104,7 @@ describe Puppet::Context::TrustedInformation do
       unfrozen_items(actual).empty?
     end
 
-    failure_message_for_should do |actual|
+    failure_message do |actual|
       "expected all items to be frozen but <#{unfrozen_items(actual).join(', ')}> was not"
     end
 

@@ -2,32 +2,17 @@ require 'puppet/settings/errors'
 
 # The base setting type
 class Puppet::Settings::BaseSetting
-  attr_accessor :name, :desc, :section, :default, :call_on_define, :call_hook
+  attr_accessor :name, :desc, :section, :default, :call_hook
   attr_reader :short, :deprecated
 
   def self.available_call_hook_values
     [:on_define_and_write, :on_initialize_and_write, :on_write_only]
   end
 
-  def call_on_define
-    Puppet.deprecation_warning "call_on_define has been deprecated.  Please use call_hook_on_define?"
-    call_hook_on_define?
-  end
-
-  def call_on_define=(value)
-    if value
-      Puppet.deprecation_warning ":call_on_define has been changed to :call_hook => :on_define_and_write. Please change #{name}."
-      @call_hook = :on_define_and_write
-    else
-      Puppet.deprecation_warning ":call_on_define => :false has been changed to :call_hook => :on_write_only. Please change #{name}."
-      @call_hook = :on_write_only
-    end
-  end
-
   def call_hook=(value)
     if value.nil?
       Puppet.warning "Setting :#{name} :call_hook is nil, defaulting to :on_write_only"
-      value ||= :on_write_only
+      value = :on_write_only
     end
     raise ArgumentError, "Invalid option #{value} for call_hook" unless self.class.available_call_hook_values.include? value
     @call_hook = value
@@ -39,19 +24,6 @@ class Puppet::Settings::BaseSetting
 
   def call_hook_on_initialize?
     call_hook == :on_initialize_and_write
-  end
-
-  #added as a proper method, only to generate a deprecation warning
-  #and return value from
-  def setbycli
-    Puppet.deprecation_warning "Puppet.settings.setting(#{name}).setbycli is deprecated. Use Puppet.settings.set_by_cli?(#{name}) instead."
-    @settings.set_by_cli?(name)
-  end
-
-  def setbycli=(value)
-    Puppet.deprecation_warning "Puppet.settings.setting(#{name}).setbycli= is deprecated. You should not manually set that values were specified on the command line."
-    @settings.set_value(name, @settings[name], :cli) if value
-    raise ArgumentError, "Cannot unset setbycli" unless value
   end
 
   # get the arguments in getopt format
@@ -155,9 +127,12 @@ class Puppet::Settings::BaseSetting
     str.gsub(/^/, "    ")
   end
 
-  # Retrieves the value, or if it's not set, retrieves the default.
-  def value
-    @settings.value(self.name)
+  # @param bypass_interpolation [Boolean] Set this true to skip the
+  #   interpolation step, returning the raw setting value.  Defaults to false.
+  # @return [String] Retrieves the value, or if it's not set, retrieves the default.
+  # @api public
+  def value(bypass_interpolation = false)
+    @settings.value(self.name, nil, bypass_interpolation)
   end
 
   # Modify the value when it is first evaluated
@@ -188,5 +163,9 @@ class Puppet::Settings::BaseSetting
   # puppet.conf, but not if the user sets it on the commandline
   def allowed_on_commandline?
     @deprecated == :allowed_on_commandline
+  end
+
+  def inspect
+    %Q{<#{self.class}:#{self.object_id} @name="#{@name}" @section="#{@section}" @default="#{@default}" @call_hook="#{@call_hook}">}
   end
 end

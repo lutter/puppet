@@ -76,6 +76,10 @@ class Puppet::Pops::Evaluator::RelationshipOperator
     o
   end
 
+  def transform_AbstractCollector(o, scope)
+    o
+  end
+
   # Array content needs to be transformed
   def transform_Array(o, scope)
     o.map{|x| transform(x, scope) }
@@ -130,7 +134,7 @@ class Puppet::Pops::Evaluator::RelationshipOperator
       # into an array, and thus the resulting left and right must be flattened individually
       # Once flattened, the operands should be sets (to remove duplicate entries)
       #
-      real = left_right_evaluated.collect {|x| [x].flatten.collect {|x| transform(x, scope) }}
+      real = left_right_evaluated.collect {|x| [x].flatten.collect {|y| transform(y, scope) }}
       real[0].flatten!
       real[1].flatten!
       real[0].uniq!

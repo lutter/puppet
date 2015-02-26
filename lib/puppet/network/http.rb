@@ -2,12 +2,18 @@ module Puppet::Network::HTTP
   HEADER_ENABLE_PROFILING = "X-Puppet-Profiling"
   HEADER_PUPPET_VERSION = "X-Puppet-Version"
 
+  MASTER_URL_PREFIX = "/puppet"
+  CA_URL_PREFIX = "/puppet-ca"
+
+  require 'puppet/network/authorization'
   require 'puppet/network/http/issues'
   require 'puppet/network/http/error'
   require 'puppet/network/http/route'
   require 'puppet/network/http/api'
-  require 'puppet/network/http/api/v1'
-  require 'puppet/network/http/api/v2'
+  require 'puppet/network/http/api/ca'
+  require 'puppet/network/http/api/ca/v1'
+  require 'puppet/network/http/api/master'
+  require 'puppet/network/http/api/master/v3'
   require 'puppet/network/http/handler'
   require 'puppet/network/http/response'
   require 'puppet/network/http/request'
@@ -17,4 +23,5 @@ module Puppet::Network::HTTP
   require 'puppet/network/http/nocache_pool'
   require 'puppet/network/http/pool'
   require 'puppet/network/http/memory_response'
+  require 'puppet/network/http/compression'
 end

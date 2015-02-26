@@ -103,11 +103,6 @@ class Puppet::Transaction::Report
     obj
   end
 
-  def self.from_pson(data)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(data)
-  end
-
   def as_logging_destination(&block)
     Puppet::Util::Log.with_destination(self, &block)
   end
@@ -127,8 +122,8 @@ class Puppet::Transaction::Report
   def add_metric(name, hash)
     metric = Puppet::Util::Metric.new(name)
 
-    hash.each do |name, value|
-      metric.newvalue(name, value)
+    hash.each do |metric_name, value|
+      metric.newvalue(metric_name, value)
     end
 
     @metrics[metric.name] = metric
@@ -286,8 +281,8 @@ class Puppet::Transaction::Report
     @metrics.each do |name, metric|
       key = metric.name.to_s
       report[key] = {}
-      metric.values.each do |name, label, value|
-        report[key][name.to_s] = value
+      metric.values.each do |metric_name, label, value|
+        report[key][metric_name.to_s] = value
       end
       report[key]["total"] = 0 unless key == "time" or report[key].include?("total")
     end
@@ -324,7 +319,7 @@ class Puppet::Transaction::Report
   end
 
   def self.default_format
-    Puppet[:report_serialization_format].intern
+    :pson
   end
 
   private

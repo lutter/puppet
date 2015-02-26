@@ -9,16 +9,17 @@ Puppet::Indirector::Face.define(:certificate_request, '0.0.1') do
     This subcommand retrieves and submits certificate signing requests (CSRs).
   EOT
 
-  # Per-action doc overrides
-  get_action(:destroy).summary "Invalid for this subcommand."
+  deactivate_action(:destroy)
 
   find = get_action(:find)
   find.summary "Retrieve a single CSR."
-  find.arguments "<host>"
+  find.arguments "[<host>]"
   find.render_as = :s
   find.returns <<-EOT
     A single certificate request. When used from the Ruby API, returns a
     Puppet::SSL::CertificateRequest object.
+
+    Defaults to the current nodes certname.
   EOT
   find.examples <<-EOT
     Retrieve a single CSR from the puppet master's CA:

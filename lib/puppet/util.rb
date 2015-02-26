@@ -23,15 +23,6 @@ module Util
 
   extend Puppet::Util::SymbolicFileMode
 
-  def self.activerecord_version
-    if (defined?(::ActiveRecord) and defined?(::ActiveRecord::VERSION) and defined?(::ActiveRecord::VERSION::MAJOR) and defined?(::ActiveRecord::VERSION::MINOR))
-      ([::ActiveRecord::VERSION::MAJOR, ::ActiveRecord::VERSION::MINOR].join('.').to_f)
-    else
-      0
-    end
-  end
-
-
   # Run some code with a specific environment.  Resets the environment back to
   # what it was at the end of the code.
   def self.withenv(hash)
@@ -109,29 +100,6 @@ module Util
         end
       })
     }
-  end
-
-  # Proxy a bunch of methods to another object.
-  def self.classproxy(klass, objmethod, *methods)
-    classobj = class << klass; self; end
-    methods.each do |method|
-      classobj.send(:define_method, method) do |*args|
-        obj = self.send(objmethod)
-
-        obj.send(method, *args)
-      end
-    end
-  end
-
-  # Proxy a bunch of methods to another object.
-  def self.proxy(klass, objmethod, *methods)
-    methods.each do |method|
-      klass.send(:define_method, method) do |*args|
-        obj = self.send(objmethod)
-
-        obj.send(method, *args)
-      end
-    end
   end
 
   def benchmark(*args)
@@ -300,17 +268,6 @@ module Util
   end
   module_function :safe_posix_fork
 
-  def memory
-    unless defined?(@pmap)
-      @pmap = which('pmap')
-    end
-    if @pmap
-      %x{#{@pmap} #{Process.pid}| grep total}.chomp.sub(/^\s*total\s+/, '').sub(/K$/, '').to_i
-    else
-      0
-    end
-  end
-
   def symbolizehash(hash)
     newhash = {}
     hash.each do |name, val|
@@ -330,14 +287,7 @@ module Util
     seconds
   end
 
-  module_function :memory, :thinmark
-
-  # Because IO#binread is only available in 1.9
-  def binread(file)
-    Puppet.deprecation_warning("Puppet::Util.binread is deprecated. Read the file without this method as it will be removed in a future version.")
-    File.open(file, 'rb') { |f| f.read }
-  end
-  module_function :binread
+  module_function :thinmark
 
   # utility method to get the current call stack and format it to a human-readable string (which some IDEs/editors
   # will recognize as links to the line numbers in the trace)
@@ -463,7 +413,9 @@ module Util
     ensure
       # in case an error occurred before we renamed the temp file, make sure it
       # gets deleted
-      tempfile.close!
+      if tempfile
+        tempfile.close!
+      end
     end
 
 
@@ -512,31 +464,6 @@ module Util
     end
   end
   module_function :deterministic_rand
-
-
-  #######################################################################################################
-  # Deprecated methods relating to process execution; these have been moved to Puppet::Util::Execution
-  #######################################################################################################
-
-  def execpipe(command, failonfail = true, &block)
-    Puppet.deprecation_warning("Puppet::Util.execpipe is deprecated; please use Puppet::Util::Execution.execpipe")
-    Puppet::Util::Execution.execpipe(command, failonfail, &block)
-  end
-  module_function :execpipe
-
-  def execfail(command, exception)
-    Puppet.deprecation_warning("Puppet::Util.execfail is deprecated; please use Puppet::Util::Execution.execfail")
-    Puppet::Util::Execution.execfail(command, exception)
-  end
-  module_function :execfail
-
-  def execute(*args)
-    Puppet.deprecation_warning("Puppet::Util.execute is deprecated; please use Puppet::Util::Execution.execute")
-
-    Puppet::Util::Execution.execute(*args)
-  end
-  module_function :execute
-
 end
 end
 

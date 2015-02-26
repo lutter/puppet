@@ -2,6 +2,10 @@ test_name "puppet module install (with dependencies)"
 require 'puppet/acceptance/module_utils'
 extend Puppet::Acceptance::ModuleUtils
 
+hosts.each do |host|
+  skip_test "skip tests requiring forge certs on solaris and aix" if host['platform'] =~ /solaris/
+end
+
 module_author = "pmtacceptance"
 module_name   = "java"
 module_dependencies   = ["stdlub"]
@@ -22,7 +26,7 @@ on master, puppet("module install #{module_author}-#{module_name}") do
     assert_module_installed_ui(stdout, module_author, dependency)
   end
 end
-assert_module_installed_on_disk(master, master['distmoduledir'], module_name)
+assert_module_installed_on_disk(master, module_name)
 module_dependencies.each do |dependency|
-  assert_module_installed_on_disk(master, master['distmoduledir'], dependency)
+  assert_module_installed_on_disk(master, dependency)
 end

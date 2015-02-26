@@ -1,7 +1,8 @@
 # Configuration settings for a single directory Environment.
 # @api private
 class Puppet::Settings::EnvironmentConf
-  VALID_SETTINGS = [:modulepath, :manifest, :config_version, :environment_timeout].freeze
+  ENVIRONMENT_CONF_ONLY_SETTINGS = [:modulepath, :manifest, :config_version].freeze
+  VALID_SETTINGS = (ENVIRONMENT_CONF_ONLY_SETTINGS + [:environment_timeout, :environment_data_provider]).freeze
 
   # Given a path to a directory environment, attempts to load and parse an
   # environment.conf in ini format, and return an EnvironmentConf instance.
@@ -37,11 +38,11 @@ class Puppet::Settings::EnvironmentConf
   # Configuration values are exactly those returned by the environment object,
   # without interpolation.  This is a special case for the default configured
   # environment returned by the Puppet::Environments::StaticPrivate loader.
-  def self.static_for(environment)
-    Static.new(environment)
+  def self.static_for(environment, environment_timeout = 0)
+    Static.new(environment, environment_timeout)
   end
 
-  attr_reader :section
+  attr_reader :section, :path_to_env, :global_modulepath
 
   # Create through EnvironmentConf.load_from()
   def initialize(path_to_env, section, global_module_path)
@@ -51,8 +52,32 @@ class Puppet::Settings::EnvironmentConf
   end
 
   def manifest
-    get_setting(:manifest, File.join(@path_to_env, "manifests")) do |manifest|
-      absolute(manifest)
+    puppet_conf_manifest = Pathname.new(Puppet.settings.value(:default_manifest))
+    disable_per_environment_manifest = Puppet.settings.value(:disable_per_environment_manifest)
+
+    fallback_manifest_directory =
+    if puppet_conf_manifest.absolute?
+      puppet_conf_manifest.to_s
+    else
+      File.join(@path_to_env, puppet_conf_manifest.to_s)
+    end
+
+    if disable_per_environment_manifest
+      environment_conf_manifest = absolute(raw_setting(:manifest))
+      if environment_conf_manifest && fallback_manifest_directory != environment_conf_manifest
+        errmsg = ["The 'disable_per_environment_manifest' setting is true, but the",
+        "environment located at #{@path_to_env} has a manifest setting in its",
+        "environment.conf of '#{environment_conf_manifest}' which does not match",
+        "the default_manifest setting '#{puppet_conf_manifest}'. If this",
+        "environment is expecting to find modules in",
+        "'#{environment_conf_manifest}', they will not be available!"]
+        Puppet.err(errmsg.join(' '))
+      end
+      fallback_manifest_directory.to_s
+    else
+      get_setting(:manifest, fallback_manifest_directory) do |manifest|
+        absolute(manifest)
+      end
     end
   end
 
@@ -63,6 +88,12 @@ class Puppet::Settings::EnvironmentConf
       # its ability to munge "4s, 3m, 5d, and 'unlimited' into seconds - if already munged into
       # numeric form, the TTLSetting handles that.
       Puppet::Settings::TTLSetting.munge(ttl, 'environment_timeout')
+    end
+  end
+
+  def environment_data_provider
+    get_setting(:environment_data_provider, Puppet.settings.value(:environment_data_provider)) do |value|
+      value
     end
   end
 
@@ -80,6 +111,11 @@ class Puppet::Settings::EnvironmentConf
     get_setting(:config_version) do |config_version|
       absolute(config_version)
     end
+  end
+
+  def raw_setting(setting_name)
+    setting = section.setting(setting_name) if section
+    setting.value if setting
   end
 
   private
@@ -103,8 +139,7 @@ class Puppet::Settings::EnvironmentConf
   end
 
   def get_setting(setting_name, default = nil)
-    setting = section.setting(setting_name) if section
-    value = setting.value if setting
+    value = raw_setting(setting_name)
     value ||= default
     yield value
   end
@@ -123,8 +158,12 @@ class Puppet::Settings::EnvironmentConf
   #
   # @api private
   class Static
-    def initialize(environment)
+    attr_reader :environment_timeout, :environment_data_provider
+
+    def initialize(environment, environment_timeout, environment_data_provider = 'none')
       @environment = environment
+      @environment_timeout = environment_timeout
+      @environment_data_provider = environment_data_provider
     end
 
     def manifest
@@ -137,10 +176,6 @@ class Puppet::Settings::EnvironmentConf
 
     def config_version
       @environment.config_version
-    end
-
-    def environment_timeout
-      0
     end
   end
 

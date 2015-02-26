@@ -64,7 +64,7 @@ USAGE
 -----
 puppet doc [-a|--all] [-h|--help] [-l|--list] [-o|--outputdir <rdoc-outputdir>]
   [-m|--mode text|pdf|rdoc] [-r|--reference <reference-name>]
-  [--charset <charset>] [<manifest-file>]
+  [--charset <charset>]
 
 
 DESCRIPTION
@@ -75,13 +75,9 @@ puppet executables. It is largely meant for internal use and is used to
 generate the reference document available on the Puppet Labs web site.
 
 In 'rdoc' mode, this command generates an html RDoc hierarchy describing
-the manifests that are in 'manifestdir' and 'modulepath' configuration
+the manifests that are in 'manifest' and 'modulepath' configuration
 directives. The generated documentation directory is doc by default but
 can be changed with the 'outputdir' option.
-
-If the command is run with the name of a manifest file as an argument,
-puppet doc will output a single manifest's documentation on stdout.
-
 
 OPTIONS
 -------
@@ -108,18 +104,14 @@ OPTIONS
 * --charset:
   Used only in 'rdoc' mode. It sets the charset used in the html files produced.
 
-* --manifestdir:
-  Used only in 'rdoc' mode. The directory to scan for stand-alone manifests.
-  If not supplied, puppet doc will use the manifestdir from puppet.conf.
-
 * --modulepath:
   Used only in 'rdoc' mode. The directory or directories to scan for modules.
-  If not supplied, puppet doc will use the modulepath from puppet.conf.
+  May be used in place of --environment.  If both settings are provided,
+  --modulepath will take precedence.
 
 * --environment:
   Used only in 'rdoc' mode. The configuration environment from which
-  to read the modulepath and manifestdir settings, when reading said settings
-  from puppet.conf.
+  to read the modulepath setting.
 
 
 EXAMPLE
@@ -128,11 +120,7 @@ EXAMPLE
 
 or
 
-    $ puppet doc --outputdir /tmp/rdoc --mode rdoc /path/to/manifests
-
-or
-
-    $ puppet doc /etc/puppet/manifests/site.pp
+    $ puppet doc --outputdir /tmp/rdoc --mode rdoc --modulepath /path/to/modules
 
 or
 
@@ -244,13 +232,13 @@ HELP
     options[:references] << :type if options[:references].empty?
   end
 
-  def setup_rdoc(dummy_argument=:work_arround_for_ruby_GC_bug)
+  def setup_rdoc
     # consume the unknown options
     # and feed them as settings
     if @unknown_args.size > 0
       @unknown_args.each do |option|
         # force absolute path for modulepath when passed on commandline
-        if option[:opt]=="--modulepath" or option[:opt] == "--manifestdir"
+        if option[:opt]=="--modulepath"
           option[:arg] = option[:arg].split(::File::PATH_SEPARATOR).collect { |p| ::File.expand_path(p) }.join(::File::PATH_SEPARATOR)
         end
         Puppet.settings.handlearg(option[:opt], option[:arg])
@@ -259,14 +247,9 @@ HELP
   end
 
   def setup_logging
-  # Handle the logging settings.
-    if options[:debug]
-      Puppet::Util::Log.level = :debug
-    elsif options[:verbose]
-      Puppet::Util::Log.level = :info
-    else
-      Puppet::Util::Log.level = :warning
-    end
+    Puppet::Util::Log.level = :warning
+
+    set_log_level
 
     Puppet::Util::Log.newdestination(:console)
   end

@@ -1,13 +1,15 @@
 require 'cgi'
 require 'uri'
 require 'puppet/indirector'
-require 'puppet/util/pson'
 require 'puppet/network/resolver'
+require 'puppet/util/psych_support'
 
 # This class encapsulates all of the information you need to make an
 # Indirection call, and as a result also handles REST calls.  It's somewhat
 # analogous to an HTTP Request object, except tuned for our Indirector.
 class Puppet::Indirector::Request
+  include Puppet::Util::PsychSupport
+
   attr_accessor :key, :method, :options, :instance, :node, :ip, :authenticated, :ignore_cache, :ignore_terminus
 
   attr_accessor :server, :port, :uri, :protocol
@@ -17,64 +19,6 @@ class Puppet::Indirector::Request
   # trusted_information is specifically left out because we can't serialize it
   # and keep it "trusted"
   OPTION_ATTRIBUTES = [:ip, :node, :authenticated, :ignore_terminus, :ignore_cache, :instance, :environment]
-
-  ::PSON.register_document_type('IndirectorRequest',self)
-
-  def self.from_data_hash(data)
-    raise ArgumentError, "No indirection name provided in data" unless indirection_name = data['type']
-    raise ArgumentError, "No method name provided in data" unless method = data['method']
-    raise ArgumentError, "No key provided in data" unless key = data['key']
-
-    request = new(indirection_name, method, key, nil, data['attributes'])
-
-    if instance = data['instance']
-      klass = Puppet::Indirector::Indirection.instance(request.indirection_name).model
-      if instance.is_a?(klass)
-        request.instance = instance
-      else
-        request.instance = klass.from_data_hash(instance)
-      end
-    end
-
-    request
-  end
-
-  def self.from_pson(json)
-    Puppet.deprecation_warning("from_pson is being removed in favour of from_data_hash.")
-    self.from_data_hash(json)
-  end
-
-  def to_data_hash
-    result = {
-      'type' => indirection_name,
-      'method' => method,
-      'key' => key
-    }
-    attributes = {}
-    OPTION_ATTRIBUTES.each do |key|
-      next unless value = send(key)
-      attributes[key] = value
-    end
-
-    options.each do |opt, value|
-      attributes[opt] = value
-    end
-
-    result['attributes'] = attributes unless attributes.empty?
-    result['instance'] = instance if instance
-    result
-  end
-
-  def to_pson_data_hash
-    {
-      'document_type' => 'IndirectorRequest',
-      'data' => to_data_hash,
-    }
-  end
-
-  def to_pson(*args)
-    to_pson_data_hash.to_pson(*args)
-  end
 
   # Is this an authenticated request?
   def authenticated?
@@ -92,11 +36,8 @@ class Puppet::Indirector::Request
     @environment =
     if env.is_a?(Puppet::Node::Environment)
       env
-    elsif (current_environment = Puppet.lookup(:current_environment)).name == env
-      current_environment
     else
-      Puppet.lookup(:environments).get(env) ||
-      raise(Puppet::Environments::EnvironmentNotFound, env)
+      Puppet.lookup(:environments).get!(env)
     end
   end
 
@@ -168,25 +109,7 @@ class Puppet::Indirector::Request
   # Create the query string, if options are present.
   def query_string
     return "" if options.nil? || options.empty?
-
-    # For backward compatibility with older (pre-3.3) masters,
-    # this puppet option allows serialization of query parameter
-    # arrays as yaml.  This can be removed when we remove yaml
-    # support entirely.
-    if Puppet.settings[:legacy_query_parameter_serialization]
-      replace_arrays_with_yaml
-    end
-
-    "?" + encode_params(expand_into_parameters(options.to_a))
-  end
-
-  def replace_arrays_with_yaml
-    options.each do |key, value|
-      case value
-        when Array
-          options[key] = YAML.dump(value)
-      end
-    end
+    encode_params(expand_into_parameters(options.to_a))
   end
 
   def expand_into_parameters(data)
@@ -224,6 +147,22 @@ class Puppet::Indirector::Request
     end.join("&")
   end
 
+  def initialize_from_hash(hash)
+    @indirection_name = hash['indirection_name'].to_sym
+    @method = hash['method'].to_sym
+    @key = hash['key']
+    @instance = hash['instance']
+    @options = hash['options']
+  end
+
+  def to_data_hash
+    { 'indirection_name' => @indirection_name.to_s,
+      'method' => @method.to_s,
+      'key' => @key,
+      'instance' => @instance,
+      'options' => @options }
+  end
+
   def to_hash
     result = options.dup
 
@@ -235,7 +174,7 @@ class Puppet::Indirector::Request
     result
   end
 
-  def to_s
+  def description
     return(uri ? uri : "/#{indirection_name}/#{key}")
   end
 

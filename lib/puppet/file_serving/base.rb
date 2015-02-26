@@ -20,7 +20,7 @@ class Puppet::FileServing::Base
   end
 
   # Return the full path to our file.  Fails if there's no path set.
-  def full_path(dummy_argument=:work_arround_for_ruby_GC_bug)
+  def full_path
     if relative_path.nil? or relative_path == "" or relative_path == "."
        full_path = path
      else
@@ -76,16 +76,6 @@ class Puppet::FileServing::Base
       'path'          => @path,
       'relative_path' => @relative_path,
       'links'         => @links
-    }
-  end
-
-  def to_pson_data_hash
-    {
-      # No 'document_type' since we don't send these bare
-      'data'       => to_data_hash,
-      'metadata' => {
-        'api_version' => 1
-        }
     }
   end
 

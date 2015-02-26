@@ -95,12 +95,12 @@ module Puppet
       metadata && metadata.checksum
     end
 
-    # Look up (if necessary) and return remote content.
+    # Look up (if necessary) and return local content.
     def content
       return @content if @content
       raise Puppet::DevError, "No source for content was stored with the metadata" unless metadata.source
 
-      unless tmp = Puppet::FileServing::Content.indirection.find(metadata.source, :environment => resource.catalog.environment, :links => resource[:links])
+      unless tmp = Puppet::FileServing::Content.indirection.find(metadata.source, :environment => resource.catalog.environment_instance, :links => resource[:links])
         self.fail "Could not find any content at %s" % metadata.source
       end
       @content = tmp.content
@@ -127,11 +127,10 @@ module Puppet
           if [:use, :use_when_creating].include?(resource[:source_permissions]) &&
             (resource[:owner] == nil || resource[:group] == nil || resource[:mode] == nil)
 
-            warning = "Copying %s from the source" <<
-                      " file on Windows is deprecated;" <<
+            err_msg = "Copying %s from the source" <<
+                      " file on Windows is not supported;" <<
                       " use source_permissions => ignore."
-            Puppet.deprecation_warning(warning % 'owner/mode/group')
-            resource.debug(warning % metadata_method.to_s)
+            self.fail Puppet::Error, err_msg % 'owner/mode/group'
           end
           # But never try to copy remote owner/group on Windows
           next if [:owner, :group].include?(metadata_method) && !local?
@@ -170,8 +169,9 @@ module Puppet
       value.each do |source|
         begin
           options = {
-            :environment          => resource.catalog.environment,
+            :environment          => resource.catalog.environment_instance,
             :links                => resource[:links],
+            :checksum_type        => resource[:checksum],
             :source_permissions   => resource[:source_permissions]
           }
 
@@ -225,7 +225,10 @@ module Puppet
     def copy_source_value(metadata_method)
       param_name = (metadata_method == :checksum) ? :content : metadata_method
       if resource[param_name].nil? or resource[param_name] == :absent
-        resource[param_name] = metadata.send(metadata_method)
+        value = metadata.send(metadata_method)
+        # Force the mode value in file resources to be a string containing octal.
+        value = value.to_s(8) if param_name == :mode && value.is_a?(Numeric)
+        resource[param_name] = value
       end
     end
   end
@@ -237,20 +240,20 @@ module Puppet
       specified. (In all cases, explicit permissions will take precedence.)
       Valid values are `use`, `use_when_creating`, and `ignore`:
 
-      * `use` (the default) will cause Puppet to apply the owner, group,
+      * `ignore` (the default) will never apply the owner, group, or mode from
+        the `source` when managing a file. When creating new files without explicit
+        permissions, the permissions they receive will depend on platform-specific
+        behavior. On POSIX, Puppet will use the umask of the user it is running as.
+        On Windows, Puppet will use the default DACL associated with the user it is
+        running as.
+      * `use` will cause Puppet to apply the owner, group,
         and mode from the `source` to any files it is managing.
       * `use_when_creating` will only apply the owner, group, and mode from the
         `source` when creating a file; existing files will not have their permissions
         overwritten.
-      * `ignore` will never apply the owner, group, or mode from the `source` when
-        managing a file. When creating new files without explicit permissions,
-        the permissions they receive will depend on platform-specific behavior.
-        On POSIX, Puppet will use the umask of the user it is running as. On
-        Windows, Puppet will use the default DACL associated with the user it is
-        running as.
     EOT
 
-    defaultto :use
+    defaultto :ignore
     newvalues(:use, :use_when_creating, :ignore)
   end
 end

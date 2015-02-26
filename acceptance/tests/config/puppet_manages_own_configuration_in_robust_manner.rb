@@ -5,7 +5,9 @@
 # expect that after correcting their actions, puppet will work correctly.
 test_name "Puppet manages its own configuration in a robust manner"
 
-skip_test "JVM Puppet cannot change its user while running." if @options[:is_jvm_puppet]
+confine :except, :platform => 'fedora-19'
+
+skip_test "JVM Puppet cannot change its user while running." if @options[:is_puppetserver]
 
 # when owner/group works on windows for settings, this confine should be removed.
 confine :except, :platform => 'windows'
@@ -45,8 +47,12 @@ teardown do
   # user and group ids back to the original uid and gid
   on master, 'rm -rf $(puppet master --configprint yamldir)'
 
+  if master.use_service_scripts?
+    on(master, puppet('resource', 'service', master['puppetservice'], 'ensure=stopped'))
+  end
+
   hosts.each do |host|
-    apply_manifest_on(host, <<-ORIG)
+    apply_manifest_on(host, <<-ORIG, :catch_failures => true)
       #{original_state[host][:ug_resources]}
     ORIG
   end

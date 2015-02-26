@@ -24,7 +24,8 @@ class Puppet::Parser::AST::PopsBridge
     end
 
     def evaluate(scope)
-      @@evaluator.evaluate(scope, @value)
+      object = @@evaluator.evaluate(scope, @value)
+      @@evaluator.convert_to_3x(object, scope)
     end
 
     # Adapts to 3x where top level constructs needs to have each to iterate over children. Short circuit this
@@ -52,13 +53,6 @@ class Puppet::Parser::AST::PopsBridge
     #
     def children
       []
-    end
-  end
-
-  class NilAsUndefExpression < Expression
-    def evaluate(scope)
-      result = super
-      result.nil? ? :undef : result
     end
   end
 
@@ -91,6 +85,8 @@ class Puppet::Parser::AST::PopsBridge
           instantiate_ResourceTypeDefinition(d, modname)
         when Puppet::Pops::Model::NodeDefinition
           instantiate_NodeDefinition(d, modname)
+        when Puppet::Pops::Model::Application
+          instantiate_ApplicationDefinition(d, modname)
         else
           raise Puppet::ParseError, "Internal Error: Unknown type of definition - got '#{d.class}'"
         end
@@ -113,37 +109,29 @@ class Puppet::Parser::AST::PopsBridge
 
     def instantiate_Parameter(o)
       # 3x needs parameters as an array of `[name]` or `[name, value_expr]`
-      # One problem is that the parameter evaluation takes place in the wrong context in 3x (the caller's and
-      # can thus reference all sorts of information. Here the value expression is wrapped in an AST Bridge to a Pops
-      # expression since the Pops side can not control the evaluation
       if o.value
-        [o.name, NilAsUndefExpression.new(:value => o.value)]
+        [o.name, Expression.new(:value => o.value)]
       else
         [o.name]
       end
     end
 
-    def create_type_map(definition)
-      result = {}
-      # No need to do anything if there are no parameters
-      return result unless definition.parameters.size > 0
-
-      # No need to do anything if there are no typed parameters
-      typed_parameters = definition.parameters.select {|p| p.type_expr }
-      return result if typed_parameters.empty?
-
-      # If there are typed parameters, they need to be evaluated to produce the corresponding type
-      # instances. This evaluation requires a scope. A scope is not available when doing deserialization
-      # (there is also no initialized evaluator). When running apply and test however, the environment is
-      # reused and we may reenter without a scope (which is fine). A debug message is then output in case
-      # there is the need to track down the odd corner case. See {#obtain_scope}.
-      #
-      if scope = obtain_scope
-        typed_parameters.each do |p|
-          result[p.name] =  @@evaluator.evaluate(scope, p.type_expr)
-        end
+    def type_map(params, map = {})
+      # If there are typed parameters, they need to be evaluated to produce
+      # the corresponding type instances. This evaluation requires a
+      # scope. A scope is not available when doing deserialization (there
+      # is also no initialized evaluator). When running apply and test
+      # however, the environment is reused and we may reenter without a
+      # scope (which is fine). A debug message is then output in case there
+      # is the need to track down the odd corner case. See {#obtain_scope}.
+      scope = nil
+      params.select do |p|
+        p.type_expr
+      end.inject(map) do |result, p|
+        scope ||= obtain_scope
+        result[p.name] = @@evaluator.evaluate(scope, p.type_expr)
+        result
       end
-      result
     end
 
     # Obtains the scope or issues a warning if :global_scope is not bound
@@ -153,7 +141,7 @@ class Puppet::Parser::AST::PopsBridge
         # when running tests that run a partial setup.
         # This is bad if the logic is trying to compile, but a warning can not be issues since it is a normal
         # use case that there is no scope when requesting the type in order to just get the parameters.
-        Puppet.debug("Instantiating Resource with type checked parameters - scope is missing, skipping type checking.")
+        Puppet.debug {"Instantiating Resource with type checked parameters - scope is missing, skipping type checking."}
         nil
       end
       scope
@@ -163,7 +151,7 @@ class Puppet::Parser::AST::PopsBridge
     def args_from_definition(o, modname)
       args = {
        :arguments => o.parameters.collect {|p| instantiate_Parameter(p) },
-       :argument_types => create_type_map(o),
+       :argument_types => type_map(o.parameters),
        :module_name => modname
       }
       unless is_nop?(o.body)
@@ -179,7 +167,23 @@ class Puppet::Parser::AST::PopsBridge
     end
 
     def instantiate_ResourceTypeDefinition(o, modname)
-      Puppet::Resource::Type.new(:definition, o.name, @context.merge(args_from_definition(o, modname)))
+      args = args_from_definition(o, modname)
+      args[:produces] = o.produces.collect {|p| Expression.new(:value => p) }
+      args[:consumes] = o.consumes.collect {|c| instantiate_Parameter(c) }
+
+      # Treat consumed capabilities as ordinary parameters
+      args[:arguments] += args[:consumes]
+      # @todo lutter 2014-11-13: typing doesn't work quite right yet; we
+      # get errors of the form "expected parameter 'sql' to have type
+      # 'Sql', got Type[Sql['one']]"
+      # type_map(o.consumes, args[:argument_types])
+
+      Puppet::Resource::Type.new(:definition, o.name, @context.merge(args))
+    end
+
+    def instantiate_ApplicationDefinition(o, modname)
+      args = args_from_definition(o, modname)
+      Puppet::Resource::Type.new(:application, o.name, @context.merge(args))
     end
 
     def instantiate_NodeDefinition(o, modname)
@@ -201,7 +205,7 @@ class Puppet::Parser::AST::PopsBridge
     end
 
     # Propagates a found Function to the appropriate loader.
-    # This is for 4x future-evaluator/loader
+    # This is for 4x evaluator/loader
     #
     def instantiate_FunctionDefinition(function_definition, modname)
       loaders = (Puppet.lookup(:loaders) { nil })

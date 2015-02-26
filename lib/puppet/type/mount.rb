@@ -2,7 +2,7 @@ require 'puppet/property/boolean'
 
 module Puppet
   # We want the mount to refresh when it changes.
-  newtype(:mount, :self_refresh => true) do
+  Type.newtype(:mount, :self_refresh => true) do
     @doc = "Manages mounted filesystems, including putting mount
       information into the mount table. The actual behavior depends
       on the value of the 'ensure' parameter.
@@ -168,11 +168,12 @@ module Puppet
     end
 
     newproperty(:options) do
-      desc "Mount options for the mounts, as they would
-        appear in the fstab."
+      desc "A single string containing options for the mount, as they would
+        appear in fstab. For many platforms this is a comma delimited string.
+        Consult the fstab(5) man page for system-specific details."
 
       validate do |value|
-        raise Puppet::Error, "option must not contain whitespace: #{value}" if value =~ /\s/
+        raise Puppet::Error, "options must not contain whitespace: #{value}" if value =~ /\s/
       end
     end
 

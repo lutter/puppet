@@ -81,7 +81,7 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
     begin
       if %r{\A[A-Za-z][A-Za-z0-9+\-\.]*://} =~ cached_source
         cached_source = File.join(tmpdir, "#{name}#{ext}")
-        args = [ "-o", cached_source, "-C", "-", "-k", "-L", "-s", "--fail", "--url", source ]
+        args = [ "-o", cached_source, "-C", "-", "-L", "-s", "--fail", "--url", source ]
         if http_proxy_host and http_proxy_port
           args << "--proxy" << "#{http_proxy_host}:#{http_proxy_port}"
         elsif http_proxy_host and not http_proxy_port
@@ -89,7 +89,7 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
         end
       begin
         curl *args
-          Puppet.debug "Success: curl transfered [#{name}] (via: curl #{args.join(" ")})"
+          Puppet.debug "Success: curl transferred [#{name}] (via: curl #{args.join(" ")})"
         rescue Puppet::ExecutionFailure
           Puppet.debug "curl #{args.join(" ")} did not transfer [#{name}].  Falling back to local file." # This used to fall back to open-uri. -NF
           cached_source = source

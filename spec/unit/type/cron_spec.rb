@@ -18,25 +18,25 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
   end
 
   it "should have :name be its namevar" do
-    described_class.key_attributes.should == [:name]
+    expect(described_class.key_attributes).to eq([:name])
   end
 
   describe "when validating attributes" do
     [:name, :provider].each do |param|
       it "should have a #{param} parameter" do
-        described_class.attrtype(param).should == :param
+        expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
     [:command, :special, :minute, :hour, :weekday, :month, :monthday, :environment, :user, :target].each do |property|
       it "should have a #{property} property" do
-        described_class.attrtype(property).should == :property
+        expect(described_class.attrtype(property)).to eq(:property)
       end
     end
 
     [:command, :minute, :hour, :weekday, :month, :monthday].each do |cronparam|
       it "should have #{cronparam} of type CronParam" do
-        described_class.attrclass(cronparam).ancestors.should include CronParam
+        expect(described_class.attrclass(cronparam).ancestors).to include CronParam
       end
     end
   end
@@ -60,10 +60,10 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
 
     describe "command" do
       it "should discard leading spaces" do
-        described_class.new(:name => 'foo', :command => " /bin/true")[:command].should_not match Regexp.new(" ")
+        expect(described_class.new(:name => 'foo', :command => " /bin/true")[:command]).not_to match Regexp.new(" ")
       end
       it "should discard trailing spaces" do
-        described_class.new(:name => 'foo', :command => "/bin/true ")[:command].should_not match Regexp.new(" ")
+        expect(described_class.new(:name => 'foo', :command => "/bin/true ")[:command]).not_to match Regexp.new(" ")
       end
     end
 
@@ -77,11 +77,11 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should translate absent to :absent" do
-        described_class.new(:name => 'foo', :minute => 'absent')[:minute].should == :absent
+        expect(described_class.new(:name => 'foo', :minute => 'absent')[:minute]).to eq(:absent)
       end
 
       it "should translate * to :absent" do
-        described_class.new(:name => 'foo', :minute => '*')[:minute].should == :absent
+        expect(described_class.new(:name => 'foo', :minute => '*')[:minute]).to eq(:absent)
       end
 
       it "should support valid single values" do
@@ -144,11 +144,11 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should translate absent to :absent" do
-        described_class.new(:name => 'foo', :hour => 'absent')[:hour].should == :absent
+        expect(described_class.new(:name => 'foo', :hour => 'absent')[:hour]).to eq(:absent)
       end
 
       it "should translate * to :absent" do
-        described_class.new(:name => 'foo', :hour => '*')[:hour].should == :absent
+        expect(described_class.new(:name => 'foo', :hour => '*')[:hour]).to eq(:absent)
       end
 
       it "should support valid single values" do
@@ -211,11 +211,11 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should translate absent to :absent" do
-        described_class.new(:name => 'foo', :weekday => 'absent')[:weekday].should == :absent
+        expect(described_class.new(:name => 'foo', :weekday => 'absent')[:weekday]).to eq(:absent)
       end
 
       it "should translate * to :absent" do
-        described_class.new(:name => 'foo', :weekday => '*')[:weekday].should == :absent
+        expect(described_class.new(:name => 'foo', :weekday => '*')[:weekday]).to eq(:absent)
       end
 
       it "should support valid numeric weekdays" do
@@ -294,11 +294,11 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should translate absent to :absent" do
-        described_class.new(:name => 'foo', :month => 'absent')[:month].should == :absent
+        expect(described_class.new(:name => 'foo', :month => 'absent')[:month]).to eq(:absent)
       end
 
       it "should translate * to :absent" do
-        described_class.new(:name => 'foo', :month => '*')[:month].should == :absent
+        expect(described_class.new(:name => 'foo', :month => '*')[:month]).to eq(:absent)
       end
 
       it "should support valid numeric values" do
@@ -307,33 +307,33 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should support valid months as words" do
-        expect { described_class.new(:name => 'foo', :month => 'January') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'February') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'March') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'April') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'May') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'June') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'July') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'August') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'September') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'October') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'November') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'December') }.to_not raise_error
+        expect( described_class.new(:name => 'foo', :month => 'January')[:month]   ).to eq(['1'])
+        expect( described_class.new(:name => 'foo', :month => 'February')[:month]  ).to eq(['2'])
+        expect( described_class.new(:name => 'foo', :month => 'March')[:month]     ).to eq(['3'])
+        expect( described_class.new(:name => 'foo', :month => 'April')[:month]     ).to eq(['4'])
+        expect( described_class.new(:name => 'foo', :month => 'May')[:month]       ).to eq(['5'])
+        expect( described_class.new(:name => 'foo', :month => 'June')[:month]      ).to eq(['6'])
+        expect( described_class.new(:name => 'foo', :month => 'July')[:month]      ).to eq(['7'])
+        expect( described_class.new(:name => 'foo', :month => 'August')[:month]    ).to eq(['8'])
+        expect( described_class.new(:name => 'foo', :month => 'September')[:month] ).to eq(['9'])
+        expect( described_class.new(:name => 'foo', :month => 'October')[:month]   ).to eq(['10'])
+        expect( described_class.new(:name => 'foo', :month => 'November')[:month]  ).to eq(['11'])
+        expect( described_class.new(:name => 'foo', :month => 'December')[:month]  ).to eq(['12'])
       end
 
       it "should support valid months as words (3 character short version)" do
-        expect { described_class.new(:name => 'foo', :month => 'Jan') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Feb') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Mar') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Apr') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'May') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Jun') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Jul') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Aug') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Sep') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Oct') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Nov') }.to_not raise_error
-        expect { described_class.new(:name => 'foo', :month => 'Dec') }.to_not raise_error
+        expect( described_class.new(:name => 'foo', :month => 'Jan')[:month] ).to eq(['1'])
+        expect( described_class.new(:name => 'foo', :month => 'Feb')[:month] ).to eq(['2'])
+        expect( described_class.new(:name => 'foo', :month => 'Mar')[:month] ).to eq(['3'])
+        expect( described_class.new(:name => 'foo', :month => 'Apr')[:month] ).to eq(['4'])
+        expect( described_class.new(:name => 'foo', :month => 'May')[:month] ).to eq(['5'])
+        expect( described_class.new(:name => 'foo', :month => 'Jun')[:month] ).to eq(['6'])
+        expect( described_class.new(:name => 'foo', :month => 'Jul')[:month] ).to eq(['7'])
+        expect( described_class.new(:name => 'foo', :month => 'Aug')[:month] ).to eq(['8'])
+        expect( described_class.new(:name => 'foo', :month => 'Sep')[:month] ).to eq(['9'])
+        expect( described_class.new(:name => 'foo', :month => 'Oct')[:month] ).to eq(['10'])
+        expect( described_class.new(:name => 'foo', :month => 'Nov')[:month] ).to eq(['11'])
+        expect( described_class.new(:name => 'foo', :month => 'Dec')[:month] ).to eq(['12'])
       end
 
       it "should not support numeric values out of range" do
@@ -394,11 +394,11 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       end
 
       it "should translate absent to :absent" do
-        described_class.new(:name => 'foo', :monthday => 'absent')[:monthday].should == :absent
+        expect(described_class.new(:name => 'foo', :monthday => 'absent')[:monthday]).to eq(:absent)
       end
 
       it "should translate * to :absent" do
-        described_class.new(:name => 'foo', :monthday => '*')[:monthday].should == :absent
+        expect(described_class.new(:name => 'foo', :monthday => '*')[:monthday]).to eq(:absent)
       end
 
       it "should support valid single values" do
@@ -524,20 +524,20 @@ describe Puppet::Type.type(:cron), :unless => Puppet.features.microsoft_windows?
       @resource = described_class.new(:name => 'dummy', :command => '/usr/bin/uptime', :user => 'alice')
       @catalog.add_resource @resource
       req = @resource.autorequire
-      req.size.should == 1
-      req[0].target.must == @resource
-      req[0].source.must == @user_alice
+      expect(req.size).to eq(1)
+      expect(req[0].target).to eq(@resource)
+      expect(req[0].source).to eq(@user_alice)
     end
   end
 
   it "should not require a command when removing an entry" do
     entry = described_class.new(:name => "test_entry", :ensure => :absent)
-    entry.value(:command).should == nil
+    expect(entry.value(:command)).to eq(nil)
   end
 
   it "should default to user => root if Etc.getpwuid(Process.uid) returns nil (#12357)" do
     Etc.expects(:getpwuid).returns(nil)
     entry = described_class.new(:name => "test_entry", :ensure => :present)
-    entry.value(:user).should eql "root"
+    expect(entry.value(:user)).to eql "root"
   end
 end

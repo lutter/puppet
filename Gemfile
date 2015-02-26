@@ -29,49 +29,43 @@ gem "hiera", *location_for(ENV['HIERA_LOCATION'] || '~> 1.0')
 gem "rake", "10.1.1", :require => false
 
 group(:development, :test) do
-  gem "rspec", "~> 2.14.0", :require => false
+  gem "rspec", "~> 3.1", :require => false
+  gem "rspec-its", "~> 1.1", :require => false
+  gem "rspec-collection_matchers", "~> 1.1", :require => false
+  gem "rspec-legacy_formatters", "~> 1.0", :require => false
 
   # Mocha is not compatible across minor version changes; because of this only
   # versions matching ~> 0.10.5 are supported. All other versions are unsupported
   # and can be expected to fail.
-  gem "mocha", "~> 0.10.5", :require => false
+  gem "mocha"# , "~> 0.10.5", :require => false
 
-  gem "yarjuf", "~> 1.0"
+  gem "yarjuf", "~> 2.0"
 
   # json-schema does not support windows, so omit it from the platforms list
   # json-schema uses multi_json, but chokes with multi_json 1.7.9, so prefer 1.7.7
   gem "multi_json", "1.7.7", :require => false, :platforms => [:ruby, :jruby]
   gem "json-schema", "2.1.1", :require => false, :platforms => [:ruby, :jruby]
+
+  gem "rubocop", "~> 0.26.1", :platforms => [:ruby]
+
+  gem 'rdoc', "~> 4.1", :platforms => [:ruby]
 end
 
 group(:development) do
   if RUBY_PLATFORM != 'java'
-    case RUBY_VERSION
-    when /^1.8/
-      gem 'ruby-prof', "~> 0.13.1", :require => false
-    else
-      gem 'ruby-prof', :require => false
-    end
+    gem 'ruby-prof', :require => false
   end
 end
 
 group(:extra) do
   gem "rack", "~> 1.4", :require => false
-  gem "activerecord", '~> 3.2', :require => false
-  gem "couchrest", '~> 1.0', :require => false
   gem "net-ssh", '~> 2.1', :require => false
   gem "puppetlabs_spec_helper", :require => false
-  # rest-client is used only by couchrest, so when
-  # that dependency goes away, this one can also
-  gem "rest-client", '1.6.7', :require => false
-  gem "stomp", :require => false
   gem "tzinfo", :require => false
   case RUBY_PLATFORM
   when 'java'
-    gem "jdbc-sqlite3", :require => false
     gem "msgpack-jruby", :require => false
   else
-    gem "sqlite3", :require => false
     gem "msgpack", :require => false
   end
 end

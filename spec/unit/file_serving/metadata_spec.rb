@@ -7,82 +7,74 @@ describe Puppet::FileServing::Metadata do
   let(:foobar) { File.expand_path('/foo/bar') }
 
   it "should be a subclass of Base" do
-    Puppet::FileServing::Metadata.superclass.should equal(Puppet::FileServing::Base)
+    expect(Puppet::FileServing::Metadata.superclass).to equal(Puppet::FileServing::Base)
   end
 
   it "should indirect file_metadata" do
-    Puppet::FileServing::Metadata.indirection.name.should == :file_metadata
+    expect(Puppet::FileServing::Metadata.indirection.name).to eq(:file_metadata)
   end
 
   it "should have a method that triggers attribute collection" do
-    Puppet::FileServing::Metadata.new(foobar).should respond_to(:collect)
+    expect(Puppet::FileServing::Metadata.new(foobar)).to respond_to(:collect)
   end
 
   it "should support pson serialization" do
-    Puppet::FileServing::Metadata.new(foobar).should respond_to(:to_pson)
-  end
-
-  it "should support to_pson_data_hash" do
-    Puppet::FileServing::Metadata.new(foobar).should respond_to(:to_pson_data_hash)
+    expect(Puppet::FileServing::Metadata.new(foobar)).to respond_to(:to_pson)
   end
 
   it "should support deserialization" do
-    Puppet::FileServing::Metadata.should respond_to(:from_data_hash)
+    expect(Puppet::FileServing::Metadata).to respond_to(:from_data_hash)
   end
 
   describe "when serializing" do
     let(:metadata) { Puppet::FileServing::Metadata.new(foobar) }
 
-    it "should serialize as FileMetadata" do
-      metadata.to_pson_data_hash['document_type'].should == "FileMetadata"
-    end
-
     it "the data should include the path, relative_path, links, owner, group, mode, checksum, type, and destination" do
-      metadata.to_pson_data_hash['data'].keys.sort.should == %w{ path relative_path links owner group mode checksum type destination }.sort
+      expect(metadata.to_data_hash.keys.sort).to eq(%w{ path relative_path links owner group mode checksum type destination }.sort)
     end
 
     it "should pass the path in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['path'].should == metadata.path
+      expect(metadata.to_data_hash['path']).to eq(metadata.path)
     end
 
     it "should pass the relative_path in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['relative_path'].should == metadata.relative_path
+      expect(metadata.to_data_hash['relative_path']).to eq(metadata.relative_path)
     end
 
     it "should pass the links in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['links'].should == metadata.links
+      expect(metadata.to_data_hash['links']).to eq(metadata.links)
     end
 
     it "should pass the path owner in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['owner'].should == metadata.owner
+      expect(metadata.to_data_hash['owner']).to eq(metadata.owner)
     end
 
     it "should pass the group in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['group'].should == metadata.group
+      expect(metadata.to_data_hash['group']).to eq(metadata.group)
     end
 
     it "should pass the mode in the hash verbatim" do
-      metadata.to_pson_data_hash['data']['mode'].should == metadata.mode
+      expect(metadata.to_data_hash['mode']).to eq(metadata.mode)
     end
 
     it "should pass the ftype in the hash verbatim as the 'type'" do
-      metadata.to_pson_data_hash['data']['type'].should == metadata.ftype
+      expect(metadata.to_data_hash['type']).to eq(metadata.ftype)
     end
 
     it "should pass the destination verbatim" do
-      metadata.to_pson_data_hash['data']['destination'].should == metadata.destination
+      expect(metadata.to_data_hash['destination']).to eq(metadata.destination)
     end
 
     it "should pass the checksum in the hash as a nested hash" do
-      metadata.to_pson_data_hash['data']['checksum'].should be_is_a(Hash)
+      expect(metadata.to_data_hash['checksum']).to be_is_a(Hash)
     end
 
     it "should pass the checksum_type in the hash verbatim as the checksum's type" do
-      metadata.to_pson_data_hash['data']['checksum']['type'].should == metadata.checksum_type
+      expect(metadata.to_data_hash['checksum']['type']).to eq(metadata.checksum_type)
     end
 
     it "should pass the checksum in the hash verbatim as the checksum's value" do
-      metadata.to_pson_data_hash['data']['checksum']['value'].should == metadata.checksum
+      expect(metadata.to_data_hash['checksum']['value']).to eq(metadata.checksum)
     end
   end
 end
@@ -101,23 +93,10 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
     describe "when collecting attributes" do
       describe "when managing files" do
         let(:path) { tmpfile('file_serving_metadata') }
+        let(:time) { Time.now }
 
         before :each do
           FileUtils.touch(path)
-        end
-
-        it "should set the owner to the file's current owner" do
-          metadata.owner.should == owner
-        end
-
-        it "should set the group to the file's current group" do
-          metadata.group.should == group
-        end
-
-        it "should set the mode to the file's masked mode" do
-          set_mode(33261, path)
-
-          metadata.mode.should == 0755
         end
 
         describe "checksumming" do
@@ -127,16 +106,29 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
             end
 
             it "should default to a checksum of the proper type with the file's current checksum" do
-              metadata.checksum.should == "{#{digest_algorithm}}#{checksum}"
+              expect(metadata.checksum).to eq("{#{digest_algorithm}}#{checksum}")
             end
 
-            it "should give a mtime checksum when checksum_type is set" do
-              time = Time.now
-              metadata.checksum_type = "mtime"
-              metadata.expects(:mtime_file).returns(@time)
+            it "should give a #{Puppet[:digest_algorithm]} when checksum_type is set" do
+              Puppet[:digest_algorithm] = nil
+              metadata.checksum_type = digest_algorithm
               metadata.collect
-              metadata.checksum.should == "{mtime}#{@time}"
+              expect(metadata.checksum).to eq("{#{digest_algorithm}}#{checksum}")
             end
+          end
+
+          it "should give a mtime checksum when checksum_type is set" do
+            metadata.checksum_type = "mtime"
+            metadata.expects(:mtime_file).returns(time)
+            metadata.collect
+            expect(metadata.checksum).to eq("{mtime}#{time}")
+          end
+
+          it "should give a ctime checksum when checksum_type is set" do
+            metadata.checksum_type = "ctime"
+            metadata.expects(:ctime_file).returns(time)
+            metadata.collect
+            expect(metadata.checksum).to eq("{ctime}#{time}")
           end
         end
 
@@ -155,14 +147,14 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
 
         it "should only use checksums of type 'ctime' for directories" do
           metadata.collect
-          metadata.checksum.should == "{ctime}#{time}"
+          expect(metadata.checksum).to eq("{ctime}#{time}")
         end
 
         it "should only use checksums of type 'ctime' for directories even if checksum_type set" do
           metadata.checksum_type = "mtime"
           metadata.expects(:mtime_file).never
           metadata.collect
-          metadata.checksum.should == "{ctime}#{time}"
+          expect(metadata.checksum).to eq("{ctime}#{time}")
         end
 
         it "should validate against the schema" do
@@ -189,9 +181,9 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
 
       win_stat = Puppet::FileServing::Metadata::WindowsStat.new(stat, path)
 
-      win_stat.owner.should == 'S-1-5-32-544'
-      win_stat.group.should == 'S-1-0-0'
-      win_stat.mode.should == 0644
+      expect(win_stat.owner).to eq('S-1-5-32-544')
+      expect(win_stat.group).to eq('S-1-0-0')
+      expect(win_stat.mode).to eq(0644)
     end
 
     it "should still raise errors that are not the result of an 'Invalid DACL'" do
@@ -199,17 +191,13 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
       path = tmpfile('bar')
       FileUtils.touch(path)
 
-      Puppet::Util::Windows::Security.stubs(:get_owner).with(path).raises(invalid_error)
-      Puppet::Util::Windows::Security.stubs(:get_group).with(path).raises(invalid_error)
-      Puppet::Util::Windows::Security.stubs(:get_mode).with(path).raises(invalid_error)
+      Puppet::Util::Windows::Security.stubs(:get_owner).with(path, :use).raises(invalid_error)
+      Puppet::Util::Windows::Security.stubs(:get_group).with(path, :use).raises(invalid_error)
+      Puppet::Util::Windows::Security.stubs(:get_mode).with(path, :use).raises(invalid_error)
 
       stat = Puppet::FileSystem.stat(path)
 
-      win_stat = Puppet::FileServing::Metadata::WindowsStat.new(stat, path)
-
-      expect { win_stat.owner }.to raise_error(ArgumentError)
-      expect { win_stat.group }.to raise_error(ArgumentError)
-      expect { win_stat.mode }.to raise_error(ArgumentError)
+      expect { Puppet::FileServing::Metadata::WindowsStat.new(stat, path, :use) }.to raise_error("Unsupported Windows source permissions option use")
     end
   end
 
@@ -236,7 +224,7 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
         end
 
         it "should read links instead of returning their checksums" do
-          metadata.destination.should == target
+          expect(metadata.destination).to eq(target)
         end
 
         it "should validate against the schema" do
@@ -270,7 +258,7 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
       it "should raise an exception if the file does not exist" do
         File.delete(path)
 
-        proc { metadata.collect}.should raise_error(Errno::ENOENT)
+        expect { metadata.collect}.to raise_error(Errno::ENOENT)
       end
 
       it "should validate against the schema" do
@@ -286,6 +274,34 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
     before :each do
       File::Stat.any_instance.stubs(:uid).returns owner
       File::Stat.any_instance.stubs(:gid).returns group
+    end
+
+    describe "when collecting attributes when managing files" do
+      let(:metadata) do
+        data = described_class.new(path)
+        data.collect
+        data
+      end
+
+      let(:path) { tmpfile('file_serving_metadata') }
+
+      before :each do
+        FileUtils.touch(path)
+      end
+
+      it "should set the owner to the Process's current owner" do
+        expect(metadata.owner).to eq(Process.euid)
+      end
+
+      it "should set the group to the Process's current group" do
+        expect(metadata.group).to eq(Process.egid)
+      end
+
+      it "should set the mode to the default mode" do
+        set_mode(33261, path)
+
+        expect(metadata.mode).to eq(0644)
+      end
     end
 
     it_should_behave_like "metadata collector"
@@ -306,6 +322,34 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
       Puppet::Util::Windows::Security.stubs(:get_group).returns group
     end
 
+    describe "when collecting attributes when managing files" do
+      let(:metadata) do
+        data = described_class.new(path)
+        data.collect
+        data
+      end
+
+      let(:path) { tmpfile('file_serving_metadata') }
+
+      before :each do
+        FileUtils.touch(path)
+      end
+
+      it "should set the owner to the Process's current owner" do
+        expect(metadata.owner).to eq("S-1-5-32-544")
+      end
+
+      it "should set the group to the Process's current group" do
+        expect(metadata.group).to eq("S-1-0-0")
+      end
+
+      it "should set the mode to the default mode" do
+        set_mode(33261, path)
+
+        expect(metadata.mode).to eq(0644)
+      end
+    end
+
     it_should_behave_like "metadata collector"
     it_should_behave_like "metadata collector symlinks" if Puppet.features.manages_symlinks?
 
@@ -323,19 +367,19 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
       it "should default owner" do
         Puppet::Util::Windows::Security.stubs(:get_owner).returns nil
 
-        metadata.owner.should == 'S-1-5-32-544'
+        expect(metadata.owner).to eq('S-1-5-32-544')
       end
 
       it "should default group" do
         Puppet::Util::Windows::Security.stubs(:get_group).returns nil
 
-        metadata.group.should == 'S-1-0-0'
+        expect(metadata.group).to eq('S-1-0-0')
       end
 
       it "should default mode" do
         Puppet::Util::Windows::Security.stubs(:get_mode).returns nil
 
-        metadata.mode.should == 0644
+        expect(metadata.mode).to eq(0644)
       end
 
       describe "when the path raises an Invalid ACL error" do
@@ -343,19 +387,19 @@ describe Puppet::FileServing::Metadata, :uses_checksums => true do
         it "should default owner" do
           Puppet::Util::Windows::Security.stubs(:get_owner).raises(invalid_dacl_error)
 
-          metadata.owner.should == 'S-1-5-32-544'
+          expect(metadata.owner).to eq('S-1-5-32-544')
         end
 
         it "should default group" do
           Puppet::Util::Windows::Security.stubs(:get_group).raises(invalid_dacl_error)
 
-          metadata.group.should == 'S-1-0-0'
+          expect(metadata.group).to eq('S-1-0-0')
         end
 
         it "should default mode" do
           Puppet::Util::Windows::Security.stubs(:get_mode).raises(invalid_dacl_error)
 
-          metadata.mode.should == 0644
+          expect(metadata.mode).to eq(0644)
         end
       end
 
@@ -390,16 +434,16 @@ describe Puppet::FileServing::Metadata, " when pointing to a link", :if => Puppe
 
       it "should store the destination of the link in :destination if links are :manage" do
         @file.collect
-        @file.destination.should == "/some/other/path"
+        expect(@file.destination).to eq("/some/other/path")
       end
       pending "should not collect the checksum if links are :manage" do
         # We'd like this to be true, but we need to always collect the checksum because in the server/client/server round trip we lose the distintion between manage and follow.
         @file.collect
-        @file.checksum.should be_nil
+        expect(@file.checksum).to be_nil
       end
       it "should collect the checksum if links are :manage" do # see pending note above
         @file.collect
-        @file.checksum.should == "{#{digest_algorithm}}#{checksum}"
+        expect(@file.checksum).to eq("{#{digest_algorithm}}#{checksum}")
       end
     end
 
@@ -421,11 +465,11 @@ describe Puppet::FileServing::Metadata, " when pointing to a link", :if => Puppe
       end
       it "should not store the destination of the link in :destination if links are :follow" do
         @file.collect
-        @file.destination.should be_nil
+        expect(@file.destination).to be_nil
       end
       it "should collect the checksum if links are :follow" do
         @file.collect
-        @file.checksum.should == "{#{digest_algorithm}}#{checksum}"
+        expect(@file.checksum).to eq("{#{digest_algorithm}}#{checksum}")
       end
     end
   end

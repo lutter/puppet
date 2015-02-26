@@ -169,6 +169,38 @@ describe "validating 4x" do
 
   end
 
+  context 'for numeric parameter names' do
+    ['1', '0x2', '03'].each do |word|
+      it "produces an error when $#{word} is used as a parameter in a class" do
+        source = "class x ($#{word}) {}"
+        expect(validate(parse(source))).to have_issue(Puppet::Pops::Issues::ILLEGAL_NUMERIC_PARAMETER)
+      end
+    end
+  end
+
+  context 'top level constructs in conditionals' do
+    ['class', 'define', 'node'].each do |word|
+      it "produces an error when $#{word} is nested in an if expression" do
+        source = "if true { #{word} x {} }"
+        expect(validate(parse(source))).to have_issue(Puppet::Pops::Issues::NOT_TOP_LEVEL)
+      end
+    end
+
+    ['class', 'define', 'node'].each do |word|
+      it "produces an error when $#{word} is nested in an if-else expression" do
+        source = "if false {} else { #{word} x {} }"
+        expect(validate(parse(source))).to have_issue(Puppet::Pops::Issues::NOT_TOP_LEVEL)
+      end
+    end
+
+    ['class', 'define', 'node'].each do |word|
+      it "produces an error when $#{word} is nested in an unless expression" do
+        source = "unless false { #{word} x {} }"
+        expect(validate(parse(source))).to have_issue(Puppet::Pops::Issues::NOT_TOP_LEVEL)
+      end
+    end
+  end
+
   def parse(source)
     Puppet::Pops::Parser::Parser.new().parse_string(source)
   end

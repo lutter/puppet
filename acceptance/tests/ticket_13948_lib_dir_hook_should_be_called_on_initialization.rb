@@ -77,11 +77,17 @@ begin
   end
 
   step "start the master" do
+    basemodulepath = "#{get_test_file_path(master, master_module_dir)}"
+    if master.is_pe?
+      basemodulepath << ":#{master['sitemoduledir']}"
+    end
     master_opts = {
+      'main' => {
+        'basemodulepath' => basemodulepath,
+      },
       'master' => {
-        'modulepath' => "#{get_test_file_path(master, master_module_dir)}",
         'node_terminus' => 'plain',
-      }
+      },
     }
 
     with_puppet_running_on master, master_opts do
