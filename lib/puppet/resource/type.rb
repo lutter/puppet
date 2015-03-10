@@ -342,6 +342,13 @@ class Puppet::Resource::Type
     end
   end
 
+  # Instances of this class are never capability resources, but they end up
+  # in places where Puppet::Type is used too, and duck-typing them this way
+  # makes the ensuing code simpler
+  def is_capability?
+    false
+  end
+
   private
 
   def convert_from_ast(name)
