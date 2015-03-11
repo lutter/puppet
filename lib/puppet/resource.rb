@@ -290,6 +290,12 @@ class Puppet::Resource
     resource_type and resource_type.is_capability?
   end
 
+  # Return the value of the 'export' metaparam as an Array
+  def export
+    v = self[:export] || []
+    v.is_a?(Array) ? v : [ v ]
+  end
+
   # The resource's type implementation
   # @return [Puppet::Type, Puppet::Resource::Type]
   # @api private
