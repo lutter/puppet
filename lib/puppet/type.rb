@@ -1642,6 +1642,10 @@ class Type
     }
   end
 
+  newmetaparam(:export) do
+    desc "Control which produced capability is actually instantiated"
+  end
+
   ###############################
   # All of the provider plumbing for the resource types.
   require 'puppet/provider'
