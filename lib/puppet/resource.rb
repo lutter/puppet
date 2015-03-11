@@ -274,6 +274,25 @@ class Puppet::Resource
     catalog ? catalog.resource(to_s) : nil
   end
 
+  def consumes
+    # @todo lutter 2015-03-10: what is the right way to get at the
+    # relationships from here ? This only takes explicit 'require'
+    # relationships into account
+
+    # Little dance to make sure we have an array of required resources
+    rels = self['require'] || []
+    rels = [ rels ] unless rels.is_a?(Array)
+
+    rels.select do |res|
+      # @todo lutter 2015-03-11: we assume that if res.resource_type is nil
+      # that it references a class or define that hasn't been set up
+      # yet. Either way, it can't be a capability
+      # If there is another reason why resource_type is nil at this point,
+      # we'll have a problem
+      res.resource_type && res.resource_type.is_capability?
+    end
+  end
+
   # The resource's type implementation
   # @return [Puppet::Type, Puppet::Resource::Type]
   # @api private
