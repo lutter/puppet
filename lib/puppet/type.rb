@@ -1638,6 +1638,14 @@ class Type
     }
   end
 
+  newmetaparam(:export, :parent => RelationshipMetaparam, :attributes => {:direction => :out, :events => :NONE}) do
+    desc "Control which produced capabilities are actually instantiated"
+  end
+
+  newmetaparam(:consume, :parent => RelationshipMetaparam, :attributes => {:direction => :in, :events => :NONE}) do
+    desc "Specify the capabilities that this resource consumes."
+  end
+
   ###############################
   # All of the provider plumbing for the resource types.
   require 'puppet/provider'
