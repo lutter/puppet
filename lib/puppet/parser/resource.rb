@@ -105,6 +105,9 @@ class Puppet::Parser::Resource < Puppet::Resource
     add_defaults
     add_scope_tags
     validate
+    # Explicitly pull in all our consumed resources as a side
+    # effect of looking them up
+    consumes.each { |cns| catalog.resource(cns.type, cns.title) }
   end
 
   # Has this resource already been finished?

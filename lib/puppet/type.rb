@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require 'puppet'
 require 'puppet/util/log'
 require 'puppet/util/metric'
@@ -104,6 +105,19 @@ class Type
     # @return [Array<Puppet::Property>] The list of declared properties for the resource type.
     # The returned lists contains instances if Puppet::Property or its subclasses.
     attr_reader :properties
+  end
+
+  # Allow declaring that a type is actually a capability
+  class << self
+    # @todo lutter 2014-11-04: this is right now only used in the
+    # declaration of the Sql capability; none of the rest of the code
+    # distingusihes between ordinary types and capabilities. We should
+    # remove this until it is actually needed by something
+    attr_accessor :is_capability
+
+    def is_capability?
+      is_capability
+    end
   end
 
   # Returns all the attribute names of the type in the appropriate order.
@@ -1626,6 +1640,10 @@ class Type
             stage => 'pre',
           }
     }
+  end
+
+  newmetaparam(:export) do
+    desc "Control which produced capability is actually instantiated"
   end
 
   ###############################

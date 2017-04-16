@@ -68,6 +68,9 @@ class Puppet::Parser::AST::PopsBridge
     def initialize(program_model, context = {})
       @program_model = program_model
       @context = context
+      # @todo lutter 2015-03-10: we maintain a list of definitions we
+      # instantiated so that we can attach ProducesDefinitions to them
+      @types = {}
       @ast_transformer ||= Puppet::Pops::Model::AstTransformer.new(@context[:file])
       @@evaluator ||= Puppet::Pops::Parser::EvaluatingParser.new()
     end
@@ -83,8 +86,12 @@ class Puppet::Parser::AST::PopsBridge
           instantiate_HostClassDefinition(d, modname)
         when Puppet::Pops::Model::ResourceTypeDefinition
           instantiate_ResourceTypeDefinition(d, modname)
+        when Puppet::Pops::Model::ProducesDefinition
+          instantiate_ProducesDefinition(d, modname)
         when Puppet::Pops::Model::NodeDefinition
           instantiate_NodeDefinition(d, modname)
+        when Puppet::Pops::Model::Application
+          instantiate_ApplicationDefinition(d, modname)
         else
           raise Puppet::ParseError, "Internal Error: Unknown type of definition - got '#{d.class}'"
         end
@@ -170,7 +177,19 @@ class Puppet::Parser::AST::PopsBridge
     end
 
     def instantiate_ResourceTypeDefinition(o, modname)
-      Puppet::Resource::Type.new(:definition, o.name, @context.merge(args_from_definition(o, modname)))
+      @types[o.name] = Puppet::Resource::Type.new(:definition, o.name, @context.merge(args_from_definition(o, modname)))
+    end
+
+    def instantiate_ProducesDefinition(o, modname)
+      type = @types[o.name] or
+        raise Puppet::ParseError, "Internal Error: produces clause: no definition for #{o.name} even though we already checked in the parser"
+      type.produces << Expression.new(:value => o.resource)
+      nil
+    end
+
+    def instantiate_ApplicationDefinition(o, modname)
+      args = args_from_definition(o, modname)
+      Puppet::Resource::Type.new(:application, o.name, @context.merge(args))
     end
 
     def instantiate_NodeDefinition(o, modname)

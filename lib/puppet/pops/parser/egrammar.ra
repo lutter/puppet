@@ -22,6 +22,7 @@ token RENDER_STRING RENDER_EXPR EPP_START EPP_END EPP_END_TRIM
 token FUNCTION
 token PRIVATE ATTR TYPE
 token LOW
+token APPLICATION PRODUCES
 
 prechigh
   left  HIGH
@@ -236,6 +237,10 @@ primary_expression
   | if_expression
   | unless_expression
   | definition_expression
+  # @todo lutter 2014-09-03: application declarations must be at the toplevel
+  # in a manifest
+  | application_expression
+  | produces_expression
   | hostclass_expression
   | node_definition_expression
   | epp_render_expression
@@ -486,6 +491,26 @@ definition_expression
       end
     }
 
+#---APPLICATION
+application_expression
+  : APPLICATION classname parameter_list LBRACE opt_statements RBRACE {
+    result = add_definition(Factory.APPLICATION(classname(val[1][:value]), val[2], val[4]))
+    loc result, val[0], val[5]
+  }
+
+produces_expression
+  # @todo lutter 2014-11-12: this is a simplified version of the resource
+  # production 'RESOURCE TITLED 3x and 4x'. Might need some more work to
+  # get it exactly right.
+  : classname PRODUCES expression LBRACE expression COLON attribute_operations RBRACE {
+    body = [Factory.RESOURCE_BODY(val[4], val[6])]
+    resource = Factory.RESOURCE(val[2], body)
+
+    result = Factory.PRODUCES(classname(val[0][:value]), resource)
+    loc result, val[0], val[7]
+    add_produces(result)
+  }
+
 #---HOSTCLASS
 #
 # Produces Model::HostClassDefinition
@@ -735,6 +760,8 @@ keyword
   | ATTR
   | FUNCTION
   | PRIVATE
+  | APPLICATION
+  | PRODUCES
 
 nil
   : { result = nil}
